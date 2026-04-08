@@ -245,7 +245,14 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const ADMIN_EMAILS  = ['vikas.singh@dbmci.one', 'daniel.paul@egurukulapp.com'];
 
 const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: {
+    detectSessionInUrl: true,
+    persistSession: true,
+    autoRefreshToken: true,
+    flowType: 'implicit'
+  }
+});
 
 // ── AUTH FLOW ──
 async function signInWithGoogle() {
@@ -344,19 +351,34 @@ async function initAuth() {
   }
 }
 
-// Clean any leftover hash from URL immediately (prevents stuck tokens)
-if (window.location.hash && window.location.hash.includes('access_token')) {
-  window.history.replaceState(null, '', window.location.pathname + window.location.search);
-}
+// ── BOOT ──
+// Supabase with detectSessionInUrl:true will automatically parse
+// the #access_token from the URL and set the session.
+// We just listen for the result.
 
-// Listen for auth state changes
 sb.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'SIGNED_IN') await initAuth();
-  if (event === 'SIGNED_OUT') showPage('login');
+  console.log('Auth event:', event, session?.user?.email);
+  if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+    // Clean the URL hash
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+    await initAuth();
+  }
+  if (event === 'SIGNED_OUT') {
+    showPage('login');
+  }
 });
 
-// Init on page load — small delay lets Supabase process the token first
-setTimeout(initAuth, 300);
+// On first load — check if session already exists
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    await initAuth();
+  } else {
+    showPage('login');
+  }
+})();
 
 // ── DASHBOARD LOGIC ──
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR_-2XkH8w9vaODhrkjtkMI-qA1oefVdRTG4go9l3jV3xKoQR2tLXAQvBfybQhiK2ThzXx-zDCjN4ff/pub?gid=0&single=true&output=csv';
