@@ -299,19 +299,22 @@ async function requestAccess(user) {
 }
 
 async function notifyAdmins(user) {
-  // We use a simple fetch to a free email relay via formspree or similar
-  // For now we'll call our Supabase edge function
   try {
-    await sb.functions.invoke('notify-admin', {
-      body: {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/notify-admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON}`
+      },
+      body: JSON.stringify({
         requesterEmail: user.email,
-        requesterName: user.user_metadata?.full_name || user.email,
-        approveUrl: `${SUPABASE_URL}/functions/v1/approve-user?email=${encodeURIComponent(user.email)}&token=dashboard2024`
-      }
+        requesterName: user.user_metadata?.full_name || user.email
+      })
     });
+    const data = await res.json();
+    console.log('Notification result:', data);
   } catch(e) {
-    // Silently fail — admin can check Supabase table manually
-    console.log('Notification sent via table — admin can approve in Supabase');
+    console.error('Notification error:', e);
   }
 }
 
