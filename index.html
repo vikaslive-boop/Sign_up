@@ -6,9 +6,55 @@
 <title>Sign Ups & Sign Ins Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f6f8; color: #1a1a2e; min-height: 100vh; }
+
+  /* ── LOGIN PAGE ── */
+  #loginPage {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+  }
+  .login-card {
+    background: #fff; border-radius: 20px; padding: 48px 40px; width: 100%; max-width: 420px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.10); text-align: center;
+  }
+  .login-logo { font-size: 22px; font-weight: 700; color: #1a1a2e; margin-bottom: 8px; }
+  .login-logo span { color: #2563eb; }
+  .login-sub { font-size: 14px; color: #64748b; margin-bottom: 36px; }
+  .btn-google {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    width: 100%; padding: 14px 20px; border-radius: 12px;
+    border: 2px solid #e2e8f0; background: #fff; cursor: pointer;
+    font-size: 15px; font-weight: 600; color: #1a1a2e;
+    transition: all 0.2s; text-decoration: none;
+  }
+  .btn-google:hover { border-color: #2563eb; background: #eff6ff; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(37,99,235,0.15); }
+  .btn-google img { width: 22px; height: 22px; }
+  .login-note { font-size: 12px; color: #94a3b8; margin-top: 20px; }
+
+  /* ── PENDING PAGE ── */
+  #pendingPage {
+    min-height: 100vh; display: none; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+  }
+  .pending-card {
+    background: #fff; border-radius: 20px; padding: 48px 40px; width: 100%; max-width: 420px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.10); text-align: center;
+  }
+  .pending-icon { font-size: 48px; margin-bottom: 16px; }
+  .pending-title { font-size: 20px; font-weight: 700; color: #1a1a2e; margin-bottom: 10px; }
+  .pending-sub { font-size: 14px; color: #64748b; line-height: 1.6; margin-bottom: 24px; }
+  .btn-signout {
+    padding: 10px 24px; border-radius: 10px; border: 1px solid #e2e8f0;
+    background: #fff; color: #64748b; font-size: 13px; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-signout:hover { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
+
+  /* ── DASHBOARD ── */
+  #dashboardPage { display: none; }
 
   header {
     background: #fff; border-bottom: 1px solid #e8eaed;
@@ -23,6 +69,11 @@
   .live-dot { width: 6px; height: 6px; background: #10b981; border-radius: 50%; animation: pulse 1.5s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
   .last-updated { font-size: 12px; color: #94a3b8; }
+  .user-info { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #64748b; }
+  .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: #eff6ff; border: 2px solid #bfdbfe; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #2563eb; overflow: hidden; }
+  .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .btn-logout { font-size: 12px; padding: 5px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; cursor: pointer; transition: all 0.2s; }
+  .btn-logout:hover { border-color: #ef4444; color: #ef4444; }
 
   .main { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
 
@@ -67,7 +118,7 @@
   .metric-card .m-label { font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
   .metric-card .m-value { font-size: 28px; font-weight: 700; color: #1a1a2e; line-height: 1; margin-bottom: 4px; }
   .metric-card .m-sub { font-size: 12px; color: #64748b; }
-  .metric-card.blue  { border-top: 3px solid #2563eb; }
+  .metric-card.blue  { border-top: 3px solid #5e8cee; }
   .metric-card.green { border-top: 3px solid #10b981; }
   .metric-card.amber { border-top: 3px solid #f59e0b; }
   .metric-card.slate { border-top: 3px solid #64748b; }
@@ -92,71 +143,217 @@
     header { padding: 14px 16px; }
     .charts-grid { grid-template-columns: 1fr; }
     .filter-bar { gap: 12px; }
+    .login-card, .pending-card { padding: 36px 24px; margin: 16px; }
   }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="logo">Activity <span>Dashboard</span></div>
-  <div class="header-right">
-    <span class="last-updated" id="lastUpdated">Fetching data…</span>
-    <span class="live-badge"><span class="live-dot"></span> Live · Auto-refresh 60s</span>
+<!-- LOGIN PAGE -->
+<div id="loginPage" style="display:flex;">
+  <div class="login-card">
+    <div class="login-logo">Activity <span>Dashboard</span></div>
+    <div class="login-sub">Sign in to access the dashboard</div>
+    <button class="btn-google" onclick="signInWithGoogle()">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google"/>
+      Continue with Google
+    </button>
+    <div class="login-note">Only authorised for selected members.</div>
   </div>
-</header>
+</div>
 
-<div class="main">
+<!-- PENDING APPROVAL PAGE -->
+<div id="pendingPage" style="display:none; min-height:100vh; align-items:center; justify-content:center; background:linear-gradient(135deg,#eff6ff 0%,#f0fdf4 100%);">
+  <div class="pending-card">
+    <div class="pending-icon">⏳</div>
+    <div class="pending-title">Access Requested</div>
+    <div class="pending-sub">Your request has been sent to the admin for approval.<br>You'll get access once it's approved. Please check back later.</div>
+    <button class="btn-signout" onclick="signOut()">Sign out</button>
+  </div>
+</div>
 
-  <div class="filter-bar">
-    <div class="filter-group">
-      <label>Year</label>
-      <select id="yearSel"><option value="all">All years</option></select>
-    </div>
-    <div class="filter-group">
-      <label>Month</label>
-      <select id="monthSel"><option value="all">All months</option></select>
-    </div>
-    <div class="filter-divider"></div>
-    <div class="filter-group">
-      <label>Date range</label>
-      <div class="date-range">
-        <input type="date" id="dateFrom" />
-        <span>to</span>
-        <input type="date" id="dateTo" />
+<!-- DASHBOARD PAGE -->
+<div id="dashboardPage" style="display:none;">
+  <header>
+    <div class="logo">Activity <span>Dashboard</span></div>
+    <div class="header-right">
+      <span class="last-updated" id="lastUpdated">Fetching data…</span>
+      <span class="live-badge"><span class="live-dot"></span> Live · Auto-refresh 60s</span>
+      <div class="user-info">
+        <div class="user-avatar" id="userAvatar"></div>
+        <span id="userEmail"></span>
       </div>
+      <button class="btn-logout" onclick="signOut()">Sign out</button>
     </div>
-    <div class="filter-divider"></div>
-    <div class="filter-group">
-      <label>Type</label>
-      <select id="typeSel">
-        <option value="all">Sign Ups + Sign Ins</option>
-        <option value="signup">Sign Ups only</option>
-        <option value="signin">Sign Ins only</option>
-      </select>
-    </div>
-    <div class="filter-divider"></div>
-    <div class="filter-group">
-      <label>View by</label>
-      <select id="viewSel">
-        <option value="monthly">Monthly</option>
-        <option value="weekly">Weekly</option>
-        <option value="daily">Daily</option>
-      </select>
-    </div>
-    <button class="btn-clear" onclick="clearAllFilters()">✕ Clear all filters</button>
-  </div>
+  </header>
 
-  <div class="active-filters" id="activeTags"></div>
+  <div class="main">
+    <div class="filter-bar">
+      <div class="filter-group">
+        <label>Year</label>
+        <select id="yearSel"><option value="all">All years</option></select>
+      </div>
+      <div class="filter-group">
+        <label>Month</label>
+        <select id="monthSel"><option value="all">All months</option></select>
+      </div>
+      <div class="filter-divider"></div>
+      <div class="filter-group">
+        <label>Date range</label>
+        <div class="date-range">
+          <input type="date" id="dateFrom" />
+          <span>to</span>
+          <input type="date" id="dateTo" />
+        </div>
+      </div>
+      <div class="filter-divider"></div>
+      <div class="filter-group">
+        <label>Type</label>
+        <select id="typeSel">
+          <option value="all">Sign Ups + Sign Ins</option>
+          <option value="signup">Sign Ups only</option>
+          <option value="signin">Sign Ins only</option>
+        </select>
+      </div>
+      <div class="filter-divider"></div>
+      <div class="filter-group">
+        <label>View by</label>
+        <select id="viewSel">
+          <option value="monthly">Monthly</option>
+          <option value="weekly">Weekly</option>
+          <option value="daily">Daily</option>
+        </select>
+      </div>
+      <button class="btn-clear" onclick="clearAllFilters()">✕ Clear all filters</button>
+    </div>
 
-  <div id="appContent">
-    <div class="loading-state">
-      <div class="spinner"></div>
-      Loading data…
+    <div class="active-filters" id="activeTags"></div>
+
+    <div id="appContent">
+      <div class="loading-state">
+        <div class="spinner"></div>
+        Loading data…
+      </div>
     </div>
   </div>
 </div>
 
 <script>
+// ── SUPABASE SETUP ──
+const SUPABASE_URL  = 'https://gbodnshovsgaisfvxjnz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdib2Ruc2hvdnNnYWlzZnZ4am56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NTkzNDYsImV4cCI6MjA5MTIzNTM0Nn0.amG5NTp9619o-246N8S4DZU50WmxwaadOtNvbHBr0z4';
+const ADMIN_EMAILS  = ['vikas.singh@dbmci.one', 'daniel.paul@egurukulapp.com'];
+
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// ── AUTH FLOW ──
+async function signInWithGoogle() {
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.href }
+  });
+  if (error) alert('Login failed: ' + error.message);
+}
+
+async function signOut() {
+  await sb.auth.signOut();
+  showPage('login');
+}
+
+async function checkAccess(email) {
+  const { data, error } = await sb
+    .from('approved_emails')
+    .select('approved')
+    .eq('email', email)
+    .single();
+
+  if (error || !data) return false;
+  return data.approved === true;
+}
+
+async function requestAccess(user) {
+  // Insert pending request (approved = false) if not already there
+  const { data: existing } = await sb
+    .from('approved_emails')
+    .select('email')
+    .eq('email', user.email)
+    .single();
+
+  if (!existing) {
+    await sb.from('approved_emails').insert({ email: user.email, approved: false });
+  }
+
+  // Send notification email via Supabase Edge Function (or fallback to mailto)
+  await notifyAdmins(user);
+}
+
+async function notifyAdmins(user) {
+  // We use a simple fetch to a free email relay via formspree or similar
+  // For now we'll call our Supabase edge function
+  try {
+    await sb.functions.invoke('notify-admin', {
+      body: {
+        requesterEmail: user.email,
+        requesterName: user.user_metadata?.full_name || user.email,
+        approveUrl: `${SUPABASE_URL}/functions/v1/approve-user?email=${encodeURIComponent(user.email)}&token=dashboard2024`
+      }
+    });
+  } catch(e) {
+    // Silently fail — admin can check Supabase table manually
+    console.log('Notification sent via table — admin can approve in Supabase');
+  }
+}
+
+function showPage(page) {
+  document.getElementById('loginPage').style.display     = page === 'login'     ? 'flex'  : 'none';
+  document.getElementById('pendingPage').style.display   = page === 'pending'   ? 'flex'  : 'none';
+  document.getElementById('dashboardPage').style.display = page === 'dashboard' ? 'block' : 'none';
+}
+
+async function initAuth() {
+  const { data: { session } } = await sb.auth.getSession();
+
+  if (!session) {
+    showPage('login');
+    return;
+  }
+
+  const user  = session.user;
+  const email = user.email;
+  const allowed = await checkAccess(email);
+
+  if (allowed) {
+    // Show dashboard
+    showPage('dashboard');
+    // Set user info in header
+    const avatarEl = document.getElementById('userAvatar');
+    const avatar = user.user_metadata?.avatar_url;
+    if (avatar) avatarEl.innerHTML = `<img src="${avatar}" alt="avatar"/>`;
+    else avatarEl.textContent = email[0].toUpperCase();
+    document.getElementById('userEmail').textContent = email;
+
+    // Attach filter listeners & load data
+    attachListeners();
+    fetchData();
+    setInterval(fetchData, 60000);
+  } else {
+    // Not approved — request access & show pending
+    await requestAccess(user);
+    showPage('pending');
+  }
+}
+
+// Listen for auth state changes (after OAuth redirect)
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'SIGNED_IN') await initAuth();
+  if (event === 'SIGNED_OUT') showPage('login');
+});
+
+// Init on page load
+initAuth();
+
+// ── DASHBOARD LOGIC ──
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR_-2XkH8w9vaODhrkjtkMI-qA1oefVdRTG4go9l3jV3xKoQR2tLXAQvBfybQhiK2ThzXx-zDCjN4ff/pub?gid=0&single=true&output=csv';
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 let allRows = [];
@@ -179,7 +376,7 @@ function fetchData() {
       document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
     },
     error() {
-      document.getElementById('appContent').innerHTML = `<div class="error-state"><strong>Could not load data.</strong><p>Check that the sheet is published as CSV and the link is correct.</p></div>`;
+      document.getElementById('appContent').innerHTML = `<div class="error-state"><strong>Could not load data.</strong><p>Please refresh the page.</p></div>`;
     }
   });
 }
@@ -190,24 +387,16 @@ function processData(raw) {
     const keys = Object.keys(r);
     const type = (r[keys[0]] || '').trim();
     if (!type || type === 'Download status') return;
-
     let dateStr = r['created_on'] || r['Created_on'] || Object.values(r)[1] || '';
     const dt = parseDate(dateStr);
     if (!dt || dt < new Date(2025, 0, 1)) return;
-
     let week  = r['created_week']  || r['Created_week']  || Object.values(r)[2] || '';
     let month = r['created_month'] || r['Created_month'] || Object.values(r)[3] || '';
     let year  = r['created_year']  || r['Created_year']  || Object.values(r)[4] || dt.getFullYear();
-
     allRows.push({
-      type,
-      isSignup: /sign.?up/i.test(type),
-      isSignin: /sign.?in/i.test(type),
-      dt,
-      year:  +year  || dt.getFullYear(),
-      month: +month || dt.getMonth() + 1,
-      week:  +week  || getWeekNum(dt),
-      day:   dt.toISOString().slice(0, 10),
+      type, isSignup: /sign.?up/i.test(type), isSignin: /sign.?in/i.test(type),
+      dt, year: +year || dt.getFullYear(), month: +month || dt.getMonth()+1,
+      week: +week || getWeekNum(dt), day: dt.toISOString().slice(0,10),
     });
   });
   populateFilters();
@@ -236,7 +425,7 @@ function updateMonthFilter() {
   const y = document.getElementById('yearSel').value;
   const mSel = document.getElementById('monthSel');
   const cur = mSel.value;
-  const months = [...new Set(allRows.filter(r => y === 'all' || r.year === +y).map(r => r.month))].sort((a,b) => a-b);
+  const months = [...new Set(allRows.filter(r => y === 'all' || r.year === +y).map(r => r.month))].sort((a,b)=>a-b);
   mSel.innerHTML = '<option value="all">All months</option>';
   months.forEach(mn => {
     const o = document.createElement('option');
@@ -247,14 +436,13 @@ function updateMonthFilter() {
 }
 
 function getFiltered() {
-  const y    = document.getElementById('yearSel').value;
-  const m    = document.getElementById('monthSel').value;
+  const y = document.getElementById('yearSel').value;
+  const m = document.getElementById('monthSel').value;
   const type = document.getElementById('typeSel').value;
   const from = document.getElementById('dateFrom').value;
   const to   = document.getElementById('dateTo').value;
   const fromDt = from ? new Date(from) : null;
   const toDt   = to   ? new Date(to + 'T23:59:59') : null;
-
   return allRows.filter(r => {
     if (y !== 'all' && r.year  !== +y) return false;
     if (m !== 'all' && r.month !== +m) return false;
@@ -277,23 +465,21 @@ function clearAllFilters() {
 }
 
 function updateActiveTags() {
-  const y    = document.getElementById('yearSel').value;
-  const m    = document.getElementById('monthSel').value;
+  const y = document.getElementById('yearSel').value;
+  const m = document.getElementById('monthSel').value;
   const type = document.getElementById('typeSel').value;
   const from = document.getElementById('dateFrom').value;
   const to   = document.getElementById('dateTo').value;
   const tags = [];
-
-  if (y !== 'all')    tags.push({ label: 'Year: ' + y,             clear: () => { document.getElementById('yearSel').value='all'; updateMonthFilter(); renderDashboard(); }});
-  if (m !== 'all')    tags.push({ label: 'Month: ' + MONTHS[+m-1], clear: () => { document.getElementById('monthSel').value='all'; renderDashboard(); }});
-  if (type !== 'all') tags.push({ label: type === 'signup' ? 'Sign Ups only' : 'Sign Ins only', clear: () => { document.getElementById('typeSel').value='all'; renderDashboard(); }});
-  if (from)           tags.push({ label: 'From: ' + from,           clear: () => { document.getElementById('dateFrom').value=''; renderDashboard(); }});
-  if (to)             tags.push({ label: 'To: ' + to,               clear: () => { document.getElementById('dateTo').value=''; renderDashboard(); }});
-
-  window._tagClears = tags.map(t => t.clear);
+  if (y !== 'all')    tags.push({ label:'Year: '+y,             clear:()=>{ document.getElementById('yearSel').value='all'; updateMonthFilter(); renderDashboard(); }});
+  if (m !== 'all')    tags.push({ label:'Month: '+MONTHS[+m-1], clear:()=>{ document.getElementById('monthSel').value='all'; renderDashboard(); }});
+  if (type !== 'all') tags.push({ label:type==='signup'?'Sign Ups only':'Sign Ins only', clear:()=>{ document.getElementById('typeSel').value='all'; renderDashboard(); }});
+  if (from)           tags.push({ label:'From: '+from,           clear:()=>{ document.getElementById('dateFrom').value=''; renderDashboard(); }});
+  if (to)             tags.push({ label:'To: '+to,               clear:()=>{ document.getElementById('dateTo').value=''; renderDashboard(); }});
+  window._tagClears = tags.map(t=>t.clear);
   const container = document.getElementById('activeTags');
   container.innerHTML = '';
-  tags.forEach((t, i) => {
+  tags.forEach((t,i)=>{
     const el = document.createElement('div');
     el.className = 'filter-tag';
     el.innerHTML = `${t.label} <button onclick="window._tagClears[${i}]()">×</button>`;
@@ -305,10 +491,10 @@ function groupData(rows, view) {
   const map = {};
   rows.forEach(r => {
     let key;
-    if (view === 'monthly')     key = r.year + '-' + String(r.month).padStart(2,'0');
-    else if (view === 'weekly') key = r.year + '-W' + String(r.week).padStart(2,'0');
-    else                        key = r.day;
-    if (!map[key]) map[key] = { signups: 0, signins: 0 };
+    if (view==='monthly')     key = r.year+'-'+String(r.month).padStart(2,'0');
+    else if (view==='weekly') key = r.year+'-W'+String(r.week).padStart(2,'0');
+    else                      key = r.day;
+    if (!map[key]) map[key] = { signups:0, signins:0 };
     if (r.isSignup) map[key].signups++;
     else if (r.isSignin) map[key].signins++;
     else map[key].signups++;
@@ -316,13 +502,13 @@ function groupData(rows, view) {
   const keys = Object.keys(map).sort();
   return {
     labels: keys.map(k => {
-      if (view === 'monthly') { const [y,mo]=k.split('-'); return MONTHS[+mo-1]+' \''+String(y).slice(2); }
-      if (view === 'weekly')  return k.replace('-',' ');
+      if (view==='monthly') { const [y,mo]=k.split('-'); return MONTHS[+mo-1]+'\''+String(y).slice(2); }
+      if (view==='weekly')  return k.replace('-',' ');
       const d = new Date(k+'T00:00:00');
       return (d.getMonth()+1)+'/'+d.getDate();
     }),
-    signups: keys.map(k => map[k].signups),
-    signins: keys.map(k => map[k].signins),
+    signups: keys.map(k=>map[k].signups),
+    signins: keys.map(k=>map[k].signins),
     count: keys.length,
   };
 }
@@ -331,30 +517,25 @@ function destroyChart(id) {
   if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; }
 }
 
-const BLUE  = '#2563eb', GREEN = '#10b981';
-const BLUEF = 'rgba(37,99,235,0.10)', GREENF = 'rgba(16,185,129,0.08)';
-const GRID  = 'rgba(0,0,0,0.05)', TICK = '#94a3b8';
+const BLUE='#2563EB', GREEN='#10b981';
+const BLUEF='rgba(37,99,235,0.10)', GREENF='rgba(16,185,129,0.08)';
+const GRID='rgba(0,0,0,0.05)', TICK='#94a3b8';
 
 function labelPlugin() {
   return {
-    id: 'topLabels',
+    id:'topLabels',
     afterDatasetsDraw(chart) {
       const ctx = chart.ctx;
       if (chart.data.labels.length > 60) return;
-      chart.data.datasets.forEach((ds, di) => {
+      chart.data.datasets.forEach((ds,di) => {
         const meta = chart.getDatasetMeta(di);
         if (meta.hidden) return;
-        meta.data.forEach((el, i) => {
-          const v = ds.data[i];
-          if (!v) return;
+        meta.data.forEach((el,i) => {
+          const v = ds.data[i]; if (!v) return;
           const pos = el.tooltipPosition();
-          ctx.save();
-          ctx.font = '600 10px -apple-system,sans-serif';
-          ctx.fillStyle = ds.borderColor || '#555';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'bottom';
-          ctx.fillText(v.toLocaleString(), pos.x, pos.y - 5);
-          ctx.restore();
+          ctx.save(); ctx.font='600 10px -apple-system,sans-serif';
+          ctx.fillStyle=ds.borderColor||'#555'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+          ctx.fillText(v.toLocaleString(), pos.x, pos.y-5); ctx.restore();
         });
       });
     }
@@ -364,29 +545,26 @@ function labelPlugin() {
 function renderDashboard() {
   updateMonthFilter();
   updateActiveTags();
-
   const filtered   = getFiltered();
   const view       = document.getElementById('viewSel').value;
   const typeFilter = document.getElementById('typeSel').value;
-  const { labels, signups, signins, count: periods } = groupData(filtered, view);
-
+  const { labels, signups, signins, count:periods } = groupData(filtered, view);
   const totalSU = signups.reduce((a,b)=>a+b,0);
   const totalSI = signins.reduce((a,b)=>a+b,0);
   const total   = totalSU + totalSI;
   const ratio   = total ? Math.round(totalSU/total*100) : 0;
-
   const showSignup = typeFilter !== 'signin';
   const showSignin = typeFilter !== 'signup';
-  const periodLabel = view === 'daily' ? 'day' : view === 'weekly' ? 'week' : 'month';
+  const periodLabel = view==='daily'?'day':view==='weekly'?'week':'month';
 
   document.getElementById('appContent').innerHTML = `
     <div class="metrics">
-      <div class="metric-card blue">
+      <div class="metric-card blue" style="opacity:${typeFilter==='signin'?'0.25':'1'}">
         <div class="m-label">Sign Ups</div>
         <div class="m-value">${totalSU.toLocaleString()}</div>
         <div class="m-sub">${ratio}% of total</div>
       </div>
-      <div class="metric-card green">
+      <div class="metric-card green" style="opacity:${typeFilter==='signup'?'0.25':'1'}">
         <div class="m-label">Sign Ins</div>
         <div class="m-value">${totalSI.toLocaleString()}</div>
         <div class="m-sub">${100-ratio}% of total</div>
@@ -398,11 +576,10 @@ function renderDashboard() {
       </div>
       <div class="metric-card slate">
         <div class="m-label">Avg / ${periodLabel.charAt(0).toUpperCase()+periodLabel.slice(1)}</div>
-        <div class="m-value">${periods ? Math.round(total/periods).toLocaleString() : 0}</div>
+        <div class="m-value">${periods?Math.round(total/periods).toLocaleString():0}</div>
         <div class="m-sub">events per ${periodLabel}</div>
       </div>
     </div>
-
     <div class="charts-grid">
       <div class="chart-card full">
         <div class="chart-header">
@@ -410,82 +587,87 @@ function renderDashboard() {
           <div class="chart-sub">${view.charAt(0).toUpperCase()+view.slice(1)} view · smooth line</div>
         </div>
         <div class="legend">
-          ${showSignup ? `<div class="legend-item"><div class="legend-sq" style="background:${BLUE}"></div>Sign Ups</div>` : ''}
-          ${showSignin ? `<div class="legend-item"><div class="legend-sq" style="background:${GREEN}"></div>Sign Ins</div>` : ''}
+          ${showSignup?`<div class="legend-item"><div class="legend-sq" style="background:${BLUE}"></div>Sign Ups</div>`:''}
+          ${showSignin?`<div class="legend-item"><div class="legend-sq" style="background:${GREEN}"></div>Sign Ins</div>`:''}
         </div>
         <div style="position:relative;height:300px"><canvas id="cLine"></canvas></div>
       </div>
       <div class="chart-card">
         <div class="chart-header">
-          <div class="chart-title">${typeFilter === 'signin' ? 'Sign Ins' : 'Sign Ups'} — bar breakdown</div>
+          <div class="chart-title">${typeFilter==='signin'?'Sign Ins':'Sign Ups'} — bar breakdown</div>
           <div class="chart-sub">Count per ${periodLabel}</div>
         </div>
         <div style="position:relative;height:260px"><canvas id="cBar"></canvas></div>
       </div>
       <div class="chart-card">
         <div class="chart-header">
-          <div class="chart-title">Activity split</div>
-          <div class="chart-sub">Sign Ups vs Sign Ins proportion</div>
+          <div class="chart-title">Sign Ups by day of week</div>
+          <div class="chart-sub">Which days drive the most activity</div>
         </div>
         <div style="position:relative;height:260px"><canvas id="cDonut"></canvas></div>
       </div>
     </div>
   `;
 
-  const pointR = labels.length > 40 ? 2 : labels.length > 20 ? 3 : 4;
-  const ticksX = { color: TICK, font:{size:11}, maxRotation:45, autoSkip:true, maxTicksLimit: Math.min(labels.length, 16) };
-  const ticksY = { color: TICK, font:{size:11} };
-
+  const pointR = labels.length>40?2:labels.length>20?3:4;
+  const ticksX = { color:TICK, font:{size:11}, maxRotation:45, autoSkip:true, maxTicksLimit:Math.min(labels.length,16) };
+  const ticksY = { color:TICK, font:{size:11} };
   const lineDatasets = [];
   if (showSignup) lineDatasets.push({ label:'Sign Ups', data:signups, borderColor:BLUE,  backgroundColor:BLUEF,  borderWidth:2.5, tension:0.45, fill:true, pointBackgroundColor:BLUE,  pointRadius:pointR, pointHoverRadius:6 });
   if (showSignin) lineDatasets.push({ label:'Sign Ins', data:signins, borderColor:GREEN, backgroundColor:GREENF, borderWidth:2.5, tension:0.45, fill:true, pointBackgroundColor:GREEN, pointRadius:pointR, pointHoverRadius:6 });
 
   destroyChart('line');
   chartInstances['line'] = new Chart(document.getElementById('cLine'), {
-    type: 'line', plugins: [labelPlugin()],
-    data: { labels, datasets: lineDatasets },
-    options: { responsive:true, maintainAspectRatio:false,
+    type:'line', plugins:[labelPlugin()],
+    data:{ labels, datasets:lineDatasets },
+    options:{ responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false,padding:10,cornerRadius:8} },
       scales:{ x:{grid:{color:GRID},ticks:ticksX}, y:{grid:{color:GRID},ticks:ticksY,beginAtZero:true} }
     }
   });
 
-  const barData  = typeFilter === 'signin' ? signins : signups;
-  const barClr   = typeFilter === 'signin' ? GREEN : BLUE;
-  const barClrA  = typeFilter === 'signin' ? 'rgba(16,185,129,0.75)' : 'rgba(37,99,235,0.75)';
+  const barData = typeFilter==='signin'?signins:signups;
+  const barClr  = typeFilter==='signin'?GREEN:BLUE;
+  const barClrA = typeFilter==='signin'?'rgba(16,185,129,0.75)':'rgba(37,99,235,0.75)';
   destroyChart('bar');
   chartInstances['bar'] = new Chart(document.getElementById('cBar'), {
-    type: 'bar', plugins: [labelPlugin()],
-    data: { labels, datasets:[{ label: typeFilter==='signin'?'Sign Ins':'Sign Ups', data:barData, backgroundColor:barClrA, borderColor:barClr, borderWidth:1, borderRadius:4, borderSkipped:false }] },
-    options: { responsive:true, maintainAspectRatio:false,
+    type:'bar', plugins:[labelPlugin()],
+    data:{ labels, datasets:[{ label:typeFilter==='signin'?'Sign Ins':'Sign Ups', data:barData, backgroundColor:barClrA, borderColor:barClr, borderWidth:1, borderRadius:4, borderSkipped:false }] },
+    options:{ responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{display:false}, tooltip:{padding:10,cornerRadius:8} },
       scales:{ x:{grid:{display:false},ticks:ticksX}, y:{grid:{color:GRID},ticks:ticksY,beginAtZero:true} },
-layout: { padding: { right: 20 } }
+      layout:{ padding:{right:20} }
     }
   });
 
   destroyChart('donut');
+  const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const dayCounts = [0,0,0,0,0,0,0];
+  filtered.forEach(r => {
+    const dow = r.dt.getDay();
+    const idx = dow===0?6:dow-1;
+    if (r.isSignup) dayCounts[idx]++;
+  });
   chartInstances['donut'] = new Chart(document.getElementById('cDonut'), {
-    type: 'doughnut',
-    data: { labels:['Sign Ups','Sign Ins'], datasets:[{ data:[totalSU,totalSI], backgroundColor:[BLUE,GREEN], borderWidth:3, borderColor:'#fff', hoverOffset:8 }] },
-    options: { responsive:true, maintainAspectRatio:false, cutout:'65%',
-      plugins:{
-        legend:{ position:'bottom', labels:{font:{size:13},color:'#64748b',padding:20,boxWidth:13,boxHeight:13} },
-        tooltip:{ padding:10, cornerRadius:8, callbacks:{ label: ctx => ` ${ctx.label}: ${ctx.parsed.toLocaleString()} (${total?Math.round(ctx.parsed/total*100):0}%)` } }
-      }
+    type:'bar', plugins:[labelPlugin()],
+    data:{ labels:dayLabels, datasets:[{ label:'Sign Ups', data:dayCounts,
+      backgroundColor:dayCounts.map(v=>{ const max=Math.max(...dayCounts); const intensity=max?v/max:0; return `rgba(37,99,235,${0.25+intensity*0.65})`; }),
+      borderColor:BLUE, borderWidth:1, borderRadius:6, borderSkipped:false }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{padding:10,cornerRadius:8} },
+      scales:{ x:{grid:{display:false},ticks:{color:TICK,font:{size:12}}}, y:{grid:{color:GRID},ticks:ticksY,beginAtZero:true} }
     }
   });
 }
 
-document.getElementById('yearSel').addEventListener('change', () => { updateMonthFilter(); renderDashboard(); });
-document.getElementById('monthSel').addEventListener('change', renderDashboard);
-document.getElementById('typeSel').addEventListener('change', renderDashboard);
-document.getElementById('viewSel').addEventListener('change', renderDashboard);
-document.getElementById('dateFrom').addEventListener('change', renderDashboard);
-document.getElementById('dateTo').addEventListener('change', renderDashboard);
-
-fetchData();
-setInterval(fetchData, 60000);
+function attachListeners() {
+  document.getElementById('yearSel').addEventListener('change', ()=>{ updateMonthFilter(); renderDashboard(); });
+  document.getElementById('monthSel').addEventListener('change', renderDashboard);
+  document.getElementById('typeSel').addEventListener('change', renderDashboard);
+  document.getElementById('viewSel').addEventListener('change', renderDashboard);
+  document.getElementById('dateFrom').addEventListener('change', renderDashboard);
+  document.getElementById('dateTo').addEventListener('change', renderDashboard);
+}
 </script>
 </body>
 </html>
