@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sign Ups & Sign Ins Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f6f8; color: #1a1a2e; min-height: 100vh; }
+
+  header {
+    background: #fff; border-bottom: 1px solid #e8eaed;
+    padding: 16px 32px; display: flex; align-items: center;
+    justify-content: space-between; flex-wrap: wrap; gap: 12px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { font-size: 17px; font-weight: 600; color: #1a1a2e; letter-spacing: -0.3px; }
+  .logo span { color: #2563eb; }
+  .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .live-badge { font-size: 11px; font-weight: 500; background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 4px 10px; border-radius: 20px; display: flex; align-items: center; gap: 5px; }
+  .live-dot { width: 6px; height: 6px; background: #10b981; border-radius: 50%; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .last-updated { font-size: 12px; color: #94a3b8; }
+
+  .main { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
+
+  .filter-bar {
+    background: #fff; border: 1px solid #e8eaed; border-radius: 12px;
+    padding: 16px 20px; margin-bottom: 12px;
+    display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 5px; }
+  .filter-group label { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+  .filter-group select,
+  .filter-group input[type="date"] {
+    font-size: 13px; padding: 7px 12px; border-radius: 8px;
+    border: 1px solid #e2e8f0; background: #fff; color: #1a1a2e;
+    cursor: pointer; outline: none; transition: border-color 0.2s; height: 36px;
+  }
+  .filter-group select:hover, .filter-group select:focus,
+  .filter-group input[type="date"]:hover, .filter-group input[type="date"]:focus { border-color: #2563eb; }
+  .date-range { display: flex; align-items: center; gap: 8px; }
+  .date-range span { font-size: 12px; color: #94a3b8; }
+  .filter-divider { width: 1px; height: 36px; background: #e2e8f0; align-self: flex-end; }
+
+  .btn-clear {
+    height: 36px; padding: 0 16px; border-radius: 8px;
+    border: 1px solid #e2e8f0; background: #fff; color: #64748b;
+    font-size: 13px; cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px; align-self: flex-end;
+  }
+  .btn-clear:hover { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
+
+  .active-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; min-height: 4px; }
+  .filter-tag {
+    font-size: 12px; padding: 4px 10px; background: #eff6ff; color: #2563eb;
+    border: 1px solid #bfdbfe; border-radius: 20px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .filter-tag button { background: none; border: none; cursor: pointer; color: #93c5fd; font-size: 15px; line-height: 1; padding: 0; }
+  .filter-tag button:hover { color: #2563eb; }
+
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .metric-card { background: #fff; border-radius: 12px; padding: 18px 20px; border: 1px solid #e8eaed; }
+  .metric-card .m-label { font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .metric-card .m-value { font-size: 28px; font-weight: 700; color: #1a1a2e; line-height: 1; margin-bottom: 4px; }
+  .metric-card .m-sub { font-size: 12px; color: #64748b; }
+  .metric-card.blue  { border-top: 3px solid #2563eb; }
+  .metric-card.green { border-top: 3px solid #10b981; }
+  .metric-card.amber { border-top: 3px solid #f59e0b; }
+  .metric-card.slate { border-top: 3px solid #64748b; }
+
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .chart-card { background: #fff; border-radius: 12px; padding: 22px; border: 1px solid #e8eaed; }
+  .chart-card.full { grid-column: 1 / -1; }
+  .chart-header { margin-bottom: 16px; }
+  .chart-title { font-size: 14px; font-weight: 600; color: #1a1a2e; margin-bottom: 3px; }
+  .chart-sub { font-size: 12px; color: #94a3b8; }
+  .legend { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #64748b; }
+  .legend-sq { width: 10px; height: 10px; border-radius: 3px; }
+
+  .loading-state { text-align: center; padding: 80px 20px; color: #94a3b8; }
+  .loading-state .spinner { width: 32px; height: 32px; border: 3px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 16px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-state { text-align: center; padding: 60px 20px; color: #ef4444; }
+
+  @media (max-width: 700px) {
+    .main { padding: 16px; }
+    header { padding: 14px 16px; }
+    .charts-grid { grid-template-columns: 1fr; }
+    .filter-bar { gap: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Activity <span>Dashboard</span></div>
+  <div class="header-right">
+    <span class="last-updated" id="lastUpdated">Fetching data…</span>
+    <span class="live-badge"><span class="live-dot"></span> Live · Auto-refresh 60s</span>
+  </div>
+</header>
+
+<div class="main">
+
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label>Year</label>
+      <select id="yearSel"><option value="all">All years</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Month</label>
+      <select id="monthSel"><option value="all">All months</option></select>
+    </div>
+    <div class="filter-divider"></div>
+    <div class="filter-group">
+      <label>Date range</label>
+      <div class="date-range">
+        <input type="date" id="dateFrom" />
+        <span>to</span>
+        <input type="date" id="dateTo" />
+      </div>
+    </div>
+    <div class="filter-divider"></div>
+    <div class="filter-group">
+      <label>Type</label>
+      <select id="typeSel">
+        <option value="all">Sign Ups + Sign Ins</option>
+        <option value="signup">Sign Ups only</option>
+        <option value="signin">Sign Ins only</option>
+      </select>
+    </div>
+    <div class="filter-divider"></div>
+    <div class="filter-group">
+      <label>View by</label>
+      <select id="viewSel">
+        <option value="monthly">Monthly</option>
+        <option value="weekly">Weekly</option>
+        <option value="daily">Daily</option>
+      </select>
+    </div>
+    <button class="btn-clear" onclick="clearAllFilters()">✕ Clear all filters</button>
+  </div>
+
+  <div class="active-filters" id="activeTags"></div>
+
+  <div id="appContent">
+    <div class="loading-state">
+      <div class="spinner"></div>
+      Loading data…
+    </div>
+  </div>
+</div>
+
+<script>
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR_-2XkH8w9vaODhrkjtkMI-qA1oefVdRTG4go9l3jV3xKoQR2tLXAQvBfybQhiK2ThzXx-zDCjN4ff/pub?gid=0&single=true&output=csv';
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+let allRows = [];
+let chartInstances = {};
+
+function parseDate(str) {
+  if (!str) return null;
+  str = str.trim();
+  let m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (m) { let y = +m[3]; if (y < 100) y += 2000; return new Date(y, +m[2]-1, +m[1]); }
+  const d = new Date(str);
+  return isNaN(d) ? null : d;
+}
+
+function fetchData() {
+  Papa.parse(CSV_URL, {
+    download: true, header: true, skipEmptyLines: true,
+    complete(res) {
+      processData(res.data);
+      document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    },
+    error() {
+      document.getElementById('appContent').innerHTML = `<div class="error-state"><strong>Could not load data.</strong><p>Check that the sheet is published as CSV and the link is correct.</p></div>`;
+    }
+  });
+}
+
+function processData(raw) {
+  allRows = [];
+  raw.forEach(r => {
+    const keys = Object.keys(r);
+    const type = (r[keys[0]] || '').trim();
+    if (!type || type === 'Download status') return;
+
+    let dateStr = r['created_on'] || r['Created_on'] || Object.values(r)[1] || '';
+    const dt = parseDate(dateStr);
+    if (!dt || dt < new Date(2025, 0, 1)) return;
+
+    let week  = r['created_week']  || r['Created_week']  || Object.values(r)[2] || '';
+    let month = r['created_month'] || r['Created_month'] || Object.values(r)[3] || '';
+    let year  = r['created_year']  || r['Created_year']  || Object.values(r)[4] || dt.getFullYear();
+
+    allRows.push({
+      type,
+      isSignup: /sign.?up/i.test(type),
+      isSignin: /sign.?in/i.test(type),
+      dt,
+      year:  +year  || dt.getFullYear(),
+      month: +month || dt.getMonth() + 1,
+      week:  +week  || getWeekNum(dt),
+      day:   dt.toISOString().slice(0, 10),
+    });
+  });
+  populateFilters();
+  renderDashboard();
+}
+
+function getWeekNum(d) {
+  const jan1 = new Date(d.getFullYear(), 0, 1);
+  return Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+}
+
+function populateFilters() {
+  const years = [...new Set(allRows.map(r => r.year))].sort();
+  const ySel = document.getElementById('yearSel');
+  const curY = ySel.value;
+  ySel.innerHTML = '<option value="all">All years</option>';
+  years.forEach(y => {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    if (String(y) === curY) o.selected = true;
+    ySel.appendChild(o);
+  });
+}
+
+function updateMonthFilter() {
+  const y = document.getElementById('yearSel').value;
+  const mSel = document.getElementById('monthSel');
+  const cur = mSel.value;
+  const months = [...new Set(allRows.filter(r => y === 'all' || r.year === +y).map(r => r.month))].sort((a,b) => a-b);
+  mSel.innerHTML = '<option value="all">All months</option>';
+  months.forEach(mn => {
+    const o = document.createElement('option');
+    o.value = mn; o.textContent = MONTHS[mn-1];
+    if (String(mn) === cur) o.selected = true;
+    mSel.appendChild(o);
+  });
+}
+
+function getFiltered() {
+  const y    = document.getElementById('yearSel').value;
+  const m    = document.getElementById('monthSel').value;
+  const type = document.getElementById('typeSel').value;
+  const from = document.getElementById('dateFrom').value;
+  const to   = document.getElementById('dateTo').value;
+  const fromDt = from ? new Date(from) : null;
+  const toDt   = to   ? new Date(to + 'T23:59:59') : null;
+
+  return allRows.filter(r => {
+    if (y !== 'all' && r.year  !== +y) return false;
+    if (m !== 'all' && r.month !== +m) return false;
+    if (type === 'signup' && !r.isSignup) return false;
+    if (type === 'signin' && !r.isSignin) return false;
+    if (fromDt && r.dt < fromDt) return false;
+    if (toDt   && r.dt > toDt)   return false;
+    return true;
+  });
+}
+
+function clearAllFilters() {
+  document.getElementById('yearSel').value  = 'all';
+  document.getElementById('typeSel').value  = 'all';
+  document.getElementById('dateFrom').value = '';
+  document.getElementById('dateTo').value   = '';
+  updateMonthFilter();
+  document.getElementById('monthSel').value = 'all';
+  renderDashboard();
+}
+
+function updateActiveTags() {
+  const y    = document.getElementById('yearSel').value;
+  const m    = document.getElementById('monthSel').value;
+  const type = document.getElementById('typeSel').value;
+  const from = document.getElementById('dateFrom').value;
+  const to   = document.getElementById('dateTo').value;
+  const tags = [];
+
+  if (y !== 'all')    tags.push({ label: 'Year: ' + y,             clear: () => { document.getElementById('yearSel').value='all'; updateMonthFilter(); renderDashboard(); }});
+  if (m !== 'all')    tags.push({ label: 'Month: ' + MONTHS[+m-1], clear: () => { document.getElementById('monthSel').value='all'; renderDashboard(); }});
+  if (type !== 'all') tags.push({ label: type === 'signup' ? 'Sign Ups only' : 'Sign Ins only', clear: () => { document.getElementById('typeSel').value='all'; renderDashboard(); }});
+  if (from)           tags.push({ label: 'From: ' + from,           clear: () => { document.getElementById('dateFrom').value=''; renderDashboard(); }});
+  if (to)             tags.push({ label: 'To: ' + to,               clear: () => { document.getElementById('dateTo').value=''; renderDashboard(); }});
+
+  window._tagClears = tags.map(t => t.clear);
+  const container = document.getElementById('activeTags');
+  container.innerHTML = '';
+  tags.forEach((t, i) => {
+    const el = document.createElement('div');
+    el.className = 'filter-tag';
+    el.innerHTML = `${t.label} <button onclick="window._tagClears[${i}]()">×</button>`;
+    container.appendChild(el);
+  });
+}
+
+function groupData(rows, view) {
+  const map = {};
+  rows.forEach(r => {
+    let key;
+    if (view === 'monthly')     key = r.year + '-' + String(r.month).padStart(2,'0');
+    else if (view === 'weekly') key = r.year + '-W' + String(r.week).padStart(2,'0');
+    else                        key = r.day;
+    if (!map[key]) map[key] = { signups: 0, signins: 0 };
+    if (r.isSignup) map[key].signups++;
+    else if (r.isSignin) map[key].signins++;
+    else map[key].signups++;
+  });
+  const keys = Object.keys(map).sort();
+  return {
+    labels: keys.map(k => {
+      if (view === 'monthly') { const [y,mo]=k.split('-'); return MONTHS[+mo-1]+' \''+String(y).slice(2); }
+      if (view === 'weekly')  return k.replace('-',' ');
+      const d = new Date(k+'T00:00:00');
+      return (d.getMonth()+1)+'/'+d.getDate();
+    }),
+    signups: keys.map(k => map[k].signups),
+    signins: keys.map(k => map[k].signins),
+    count: keys.length,
+  };
+}
+
+function destroyChart(id) {
+  if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; }
+}
+
+const BLUE  = '#2563eb', GREEN = '#10b981';
+const BLUEF = 'rgba(37,99,235,0.10)', GREENF = 'rgba(16,185,129,0.08)';
+const GRID  = 'rgba(0,0,0,0.05)', TICK = '#94a3b8';
+
+function labelPlugin() {
+  return {
+    id: 'topLabels',
+    afterDatasetsDraw(chart) {
+      const ctx = chart.ctx;
+      if (chart.data.labels.length > 60) return;
+      chart.data.datasets.forEach((ds, di) => {
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        meta.data.forEach((el, i) => {
+          const v = ds.data[i];
+          if (!v) return;
+          const pos = el.tooltipPosition();
+          ctx.save();
+          ctx.font = '600 10px -apple-system,sans-serif';
+          ctx.fillStyle = ds.borderColor || '#555';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(v.toLocaleString(), pos.x, pos.y - 5);
+          ctx.restore();
+        });
+      });
+    }
+  };
+}
+
+function renderDashboard() {
+  updateMonthFilter();
+  updateActiveTags();
+
+  const filtered   = getFiltered();
+  const view       = document.getElementById('viewSel').value;
+  const typeFilter = document.getElementById('typeSel').value;
+  const { labels, signups, signins, count: periods } = groupData(filtered, view);
+
+  const totalSU = signups.reduce((a,b)=>a+b,0);
+  const totalSI = signins.reduce((a,b)=>a+b,0);
+  const total   = totalSU + totalSI;
+  const ratio   = total ? Math.round(totalSU/total*100) : 0;
+
+  const showSignup = typeFilter !== 'signin';
+  const showSignin = typeFilter !== 'signup';
+  const periodLabel = view === 'daily' ? 'day' : view === 'weekly' ? 'week' : 'month';
+
+  document.getElementById('appContent').innerHTML = `
+    <div class="metrics">
+      <div class="metric-card blue">
+        <div class="m-label">Sign Ups</div>
+        <div class="m-value">${totalSU.toLocaleString()}</div>
+        <div class="m-sub">${ratio}% of total</div>
+      </div>
+      <div class="metric-card green">
+        <div class="m-label">Sign Ins</div>
+        <div class="m-value">${totalSI.toLocaleString()}</div>
+        <div class="m-sub">${100-ratio}% of total</div>
+      </div>
+      <div class="metric-card amber">
+        <div class="m-label">Total Counts</div>
+        <div class="m-value">${total.toLocaleString()}</div>
+        <div class="m-sub">${periods} ${periodLabel}s</div>
+      </div>
+      <div class="metric-card slate">
+        <div class="m-label">Avg / ${periodLabel.charAt(0).toUpperCase()+periodLabel.slice(1)}</div>
+        <div class="m-value">${periods ? Math.round(total/periods).toLocaleString() : 0}</div>
+        <div class="m-sub">events per ${periodLabel}</div>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card full">
+        <div class="chart-header">
+          <div class="chart-title">Sign Ups vs Sign Ins — trend over time</div>
+          <div class="chart-sub">${view.charAt(0).toUpperCase()+view.slice(1)} view · smooth line</div>
+        </div>
+        <div class="legend">
+          ${showSignup ? `<div class="legend-item"><div class="legend-sq" style="background:${BLUE}"></div>Sign Ups</div>` : ''}
+          ${showSignin ? `<div class="legend-item"><div class="legend-sq" style="background:${GREEN}"></div>Sign Ins</div>` : ''}
+        </div>
+        <div style="position:relative;height:300px"><canvas id="cLine"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">${typeFilter === 'signin' ? 'Sign Ins' : 'Sign Ups'} — bar breakdown</div>
+          <div class="chart-sub">Count per ${periodLabel}</div>
+        </div>
+        <div style="position:relative;height:260px"><canvas id="cBar"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Activity split</div>
+          <div class="chart-sub">Sign Ups vs Sign Ins proportion</div>
+        </div>
+        <div style="position:relative;height:260px"><canvas id="cDonut"></canvas></div>
+      </div>
+    </div>
+  `;
+
+  const pointR = labels.length > 40 ? 2 : labels.length > 20 ? 3 : 4;
+  const ticksX = { color: TICK, font:{size:11}, maxRotation:45, autoSkip:true, maxTicksLimit: Math.min(labels.length, 16) };
+  const ticksY = { color: TICK, font:{size:11} };
+
+  const lineDatasets = [];
+  if (showSignup) lineDatasets.push({ label:'Sign Ups', data:signups, borderColor:BLUE,  backgroundColor:BLUEF,  borderWidth:2.5, tension:0.45, fill:true, pointBackgroundColor:BLUE,  pointRadius:pointR, pointHoverRadius:6 });
+  if (showSignin) lineDatasets.push({ label:'Sign Ins', data:signins, borderColor:GREEN, backgroundColor:GREENF, borderWidth:2.5, tension:0.45, fill:true, pointBackgroundColor:GREEN, pointRadius:pointR, pointHoverRadius:6 });
+
+  destroyChart('line');
+  chartInstances['line'] = new Chart(document.getElementById('cLine'), {
+    type: 'line', plugins: [labelPlugin()],
+    data: { labels, datasets: lineDatasets },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false,padding:10,cornerRadius:8} },
+      scales:{ x:{grid:{color:GRID},ticks:ticksX}, y:{grid:{color:GRID},ticks:ticksY,beginAtZero:true} }
+    }
+  });
+
+  const barData  = typeFilter === 'signin' ? signins : signups;
+  const barClr   = typeFilter === 'signin' ? GREEN : BLUE;
+  const barClrA  = typeFilter === 'signin' ? 'rgba(16,185,129,0.75)' : 'rgba(37,99,235,0.75)';
+  destroyChart('bar');
+  chartInstances['bar'] = new Chart(document.getElementById('cBar'), {
+    type: 'bar', plugins: [labelPlugin()],
+    data: { labels, datasets:[{ label: typeFilter==='signin'?'Sign Ins':'Sign Ups', data:barData, backgroundColor:barClrA, borderColor:barClr, borderWidth:1, borderRadius:4, borderSkipped:false }] },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{padding:10,cornerRadius:8} },
+      scales:{ x:{grid:{display:false},ticks:ticksX}, y:{grid:{color:GRID},ticks:ticksY,beginAtZero:true} },
+layout: { padding: { right: 20 } }
+    }
+  });
+
+  destroyChart('donut');
+  chartInstances['donut'] = new Chart(document.getElementById('cDonut'), {
+    type: 'doughnut',
+    data: { labels:['Sign Ups','Sign Ins'], datasets:[{ data:[totalSU,totalSI], backgroundColor:[BLUE,GREEN], borderWidth:3, borderColor:'#fff', hoverOffset:8 }] },
+    options: { responsive:true, maintainAspectRatio:false, cutout:'65%',
+      plugins:{
+        legend:{ position:'bottom', labels:{font:{size:13},color:'#64748b',padding:20,boxWidth:13,boxHeight:13} },
+        tooltip:{ padding:10, cornerRadius:8, callbacks:{ label: ctx => ` ${ctx.label}: ${ctx.parsed.toLocaleString()} (${total?Math.round(ctx.parsed/total*100):0}%)` } }
+      }
+    }
+  });
+}
+
+document.getElementById('yearSel').addEventListener('change', () => { updateMonthFilter(); renderDashboard(); });
+document.getElementById('monthSel').addEventListener('change', renderDashboard);
+document.getElementById('typeSel').addEventListener('change', renderDashboard);
+document.getElementById('viewSel').addEventListener('change', renderDashboard);
+document.getElementById('dateFrom').addEventListener('change', renderDashboard);
+document.getElementById('dateTo').addEventListener('change', renderDashboard);
+
+fetchData();
+setInterval(fetchData, 60000);
+</script>
+</body>
+</html>
