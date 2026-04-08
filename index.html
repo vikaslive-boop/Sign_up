@@ -344,30 +344,19 @@ async function initAuth() {
   }
 }
 
-// Listen for auth state changes (after OAuth redirect)
+// Clean any leftover hash from URL immediately (prevents stuck tokens)
+if (window.location.hash && window.location.hash.includes('access_token')) {
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+}
+
+// Listen for auth state changes
 sb.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN') await initAuth();
   if (event === 'SIGNED_OUT') showPage('login');
 });
 
-// Handle OAuth redirect — Supabase puts tokens in the URL hash
-async function handleRedirect() {
-  const hash = window.location.hash;
-  if (hash && hash.includes('access_token')) {
-    // Let Supabase parse the hash and set the session
-    const { data, error } = await sb.auth.getSessionFromUrl();
-    // Clean the URL
-    window.history.replaceState(null, '', window.location.pathname);
-    if (data?.session) {
-      await initAuth();
-      return;
-    }
-  }
-  await initAuth();
-}
-
-// Init on page load
-handleRedirect();
+// Init on page load — small delay lets Supabase process the token first
+setTimeout(initAuth, 300);
 
 // ── DASHBOARD LOGIC ──
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR_-2XkH8w9vaODhrkjtkMI-qA1oefVdRTG4go9l3jV3xKoQR2tLXAQvBfybQhiK2ThzXx-zDCjN4ff/pub?gid=0&single=true&output=csv';
