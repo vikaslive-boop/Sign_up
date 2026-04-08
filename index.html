@@ -258,7 +258,10 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
 async function signInWithGoogle() {
   const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.href }
+    options: { 
+      redirectTo: 'https://vikaslive-boop.github.io/Sign_up/',
+      skipBrowserRedirect: false
+    }
   });
   if (error) alert('Login failed: ' + error.message);
 }
@@ -352,28 +355,28 @@ async function initAuth() {
 }
 
 // ── BOOT ──
-// Supabase with detectSessionInUrl:true will automatically parse
-// the #access_token from the URL and set the session.
-// We just listen for the result.
+let authHandled = false;
 
 sb.auth.onAuthStateChange(async (event, session) => {
-  console.log('Auth event:', event, session?.user?.email);
+  if (authHandled) return;
   if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-    // Clean the URL hash
-    if (window.location.hash) {
-      window.history.replaceState(null, '', window.location.pathname + window.location.search);
-    }
+    authHandled = true;
+    // Clean URL — remove hash completely
+    window.history.replaceState(null, '', window.location.pathname);
     await initAuth();
   }
   if (event === 'SIGNED_OUT') {
+    authHandled = false;
+    window.history.replaceState(null, '', window.location.pathname);
     showPage('login');
   }
 });
 
-// On first load — check if session already exists
+// On first load
 (async () => {
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
+    authHandled = true;
     await initAuth();
   } else {
     showPage('login');
