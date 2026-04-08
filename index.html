@@ -158,7 +158,7 @@
       <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google"/>
       Continue with Google
     </button>
-    <div class="login-note">Only authorised for selected members.</div>
+    <div class="login-note">Only authorised company members can access this dashboard.</div>
   </div>
 </div>
 
@@ -350,8 +350,24 @@ sb.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_OUT') showPage('login');
 });
 
+// Handle OAuth redirect — Supabase puts tokens in the URL hash
+async function handleRedirect() {
+  const hash = window.location.hash;
+  if (hash && hash.includes('access_token')) {
+    // Let Supabase parse the hash and set the session
+    const { data, error } = await sb.auth.getSessionFromUrl();
+    // Clean the URL
+    window.history.replaceState(null, '', window.location.pathname);
+    if (data?.session) {
+      await initAuth();
+      return;
+    }
+  }
+  await initAuth();
+}
+
 // Init on page load
-initAuth();
+handleRedirect();
 
 // ── DASHBOARD LOGIC ──
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR_-2XkH8w9vaODhrkjtkMI-qA1oefVdRTG4go9l3jV3xKoQR2tLXAQvBfybQhiK2ThzXx-zDCjN4ff/pub?gid=0&single=true&output=csv';
