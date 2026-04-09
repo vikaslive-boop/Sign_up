@@ -283,7 +283,6 @@ async function checkAccess(email) {
 }
 
 async function requestAccess(user) {
-  // Insert pending request (approved = false) if not already there
   const { data: existing } = await sb
     .from('approved_emails')
     .select('email')
@@ -294,7 +293,6 @@ async function requestAccess(user) {
     await sb.from('approved_emails').insert({ email: user.email, approved: false });
   }
 
-  // Send notification email via Supabase Edge Function (or fallback to mailto)
   await notifyAdmins(user);
 }
 
@@ -337,34 +335,29 @@ async function initAuth() {
   const allowed = await checkAccess(email);
 
   if (allowed) {
-    // Show dashboard
     showPage('dashboard');
-    // Set user info in header
     const avatarEl = document.getElementById('userAvatar');
     const avatar = user.user_metadata?.avatar_url;
     if (avatar) avatarEl.innerHTML = `<img src="${avatar}" alt="avatar"/>`;
     else avatarEl.textContent = email[0].toUpperCase();
     document.getElementById('userEmail').textContent = email;
 
-    // Attach filter listeners & load data
     attachListeners();
     fetchData();
     setInterval(fetchData, 60000);
   } else {
-    // Not approved — request access & show pending
     await requestAccess(user);
     showPage('pending');
   }
 }
 
-// ── BOOT ──
+// ── BOOT - FIXED AUTO SIGN OUT ──
 let authHandled = false;
 
 sb.auth.onAuthStateChange(async (event, session) => {
   if (authHandled) return;
   if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
     authHandled = true;
-    // Clean URL — remove hash completely
     window.history.replaceState(null, '', window.location.pathname);
     await initAuth();
   }
@@ -375,16 +368,16 @@ sb.auth.onAuthStateChange(async (event, session) => {
   }
 });
 
-// On first load
-(async () => {
+// On first load - WITH DELAY TO PREVENT AUTO SIGN OUT
+setTimeout(async () => {
   const { data: { session } } = await sb.auth.getSession();
-  if (session) {
+  if (session && !authHandled) {
     authHandled = true;
     await initAuth();
-  } else {
+  } else if (!session) {
     showPage('login');
   }
-})();
+}, 500);
 
 // ── DASHBOARD LOGIC ──
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR_-2XkH8w9vaODhrkjtkMI-qA1oefVdRTG4go9l3jV3xKoQR2tLXAQvBfybQhiK2ThzXx-zDCjN4ff/pub?gid=0&single=true&output=csv';
@@ -426,10 +419,12 @@ function processData(raw) {
     let week  = r['created_week']  || r['Created_week']  || Object.values(r)[2] || '';
     let month = r['created_month'] || r['Created_month'] || Object.values(r)[3] || '';
     let year  = r['created_year']  || r['Created_year']  || Object.values(r)[4] || dt.getFullYear();
+    let yearOfAdmission = r['year_of_admission'] || r['Year_of_admission'] || r['year of admission'] || '';
     allRows.push({
       type, isSignup: /sign.?up/i.test(type), isSignin: /sign.?in/i.test(type),
       dt, year: +year || dt.getFullYear(), month: +month || dt.getMonth()+1,
       week: +week || getWeekNum(dt), day: dt.toISOString().slice(0,10),
+      yearOfAdmission: yearOfAdmission ? String(yearOfAdmission).trim() : 'Unknown'
     });
   });
   populateFilters();
@@ -546,6 +541,32 @@ function groupData(rows, view) {
   };
 }
 
+// NEW FUNCTION - Year of Admission Data
+function getYearAdmissionData(rows) {
+  const map = {};
+  rows.forEach(r => {
+    const year = r.yearOfAdmission;
+    if (!map[year]) map[year] = 0;
+    if (r.isSignup) map[year]++;
+  });
+  const sortedYears = Object.keys(map)
+    .filter(y => y !== 'Unknown')
+    .sort((a, b) => {
+      const aNum = parseInt(a);
+      const bNum = parseInt(b);
+      return aNum - bNum;
+    });
+  const unknownCount = map['Unknown'] || 0;
+  
+  if (unknownCount > 0) sortedYears.push('Unknown');
+  
+  return {
+    labels: sortedYears,
+    data: sortedYears.map(y => map[y]),
+    total: Object.values(map).reduce((a, b) => a + b, 0)
+  };
+}
+
 function destroyChart(id) {
   if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; }
 }
@@ -625,19 +646,12 @@ function renderDashboard() {
         </div>
         <div style="position:relative;height:300px"><canvas id="cLine"></canvas></div>
       </div>
-      <div class="chart-card">
+      <div class="chart-card full">
         <div class="chart-header">
-          <div class="chart-title">${typeFilter==='signin'?'Sign Ins':'Sign Ups'} — bar breakdown</div>
-          <div class="chart-sub">Count per ${periodLabel}</div>
+          <div class="chart-title">Year of Admission — Distribution of all sign-ups</div>
+          <div class="chart-sub">Breakdown by admission year</div>
         </div>
-        <div style="position:relative;height:260px"><canvas id="cBar"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-header">
-          <div class="chart-title">Sign Ups by day of week</div>
-          <div class="chart-sub">Which days drive the most activity</div>
-        </div>
-        <div style="position:relative;height:260px"><canvas id="cDonut"></canvas></div>
+        <div style="position:relative;height:280px"><canvas id="cYearAdmission"></canvas></div>
       </div>
     </div>
   `;
@@ -659,36 +673,69 @@ function renderDashboard() {
     }
   });
 
-  const barData = typeFilter==='signin'?signins:signups;
-  const barClr  = typeFilter==='signin'?GREEN:BLUE;
-  const barClrA = typeFilter==='signin'?'rgba(16,185,129,0.75)':'rgba(37,99,235,0.75)';
-  destroyChart('bar');
-  chartInstances['bar'] = new Chart(document.getElementById('cBar'), {
-    type:'bar', plugins:[labelPlugin()],
-    data:{ labels, datasets:[{ label:typeFilter==='signin'?'Sign Ins':'Sign Ups', data:barData, backgroundColor:barClrA, borderColor:barClr, borderWidth:1, borderRadius:4, borderSkipped:false }] },
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{padding:10,cornerRadius:8} },
-      scales:{ x:{grid:{display:false},ticks:ticksX}, y:{grid:{color:GRID},ticks:ticksY,beginAtZero:true} },
-      layout:{ padding:{right:20} }
-    }
+  // Year of Admission Chart
+  destroyChart('yearAdmission');
+  const yearAdmData = getYearAdmissionData(filtered);
+  const yearColors = yearAdmData.labels.map((label, idx) => {
+    const colors = [
+      'rgba(37,99,235,0.85)',      // Blue
+      'rgba(16,185,129,0.85)',     // Green
+      'rgba(59,130,246,0.85)',     // Bright Blue
+      'rgba(139,92,246,0.85)',     // Purple
+      'rgba(236,72,153,0.85)',     // Pink
+      'rgba(245,158,11,0.85)',     // Amber
+      'rgba(34,197,94,0.85)',      // Emerald
+      'rgba(8,145,178,0.85)',      // Cyan
+      'rgba(168,85,247,0.85)',     // Violet
+      'rgba(219,39,119,0.85)',     // Rose
+      'rgba(75,192,192,0.85)',     // Teal
+      'rgba(255,99,132,0.85)',     // Red
+      'rgba(54,162,235,0.85)',     // Light Blue
+      'rgba(153,102,255,0.85)',    // Light Purple
+      'rgba(201,203,207,0.85)'     // Gray
+    ];
+    return colors[idx % colors.length];
   });
-
-  destroyChart('donut');
-  const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const dayCounts = [0,0,0,0,0,0,0];
-  filtered.forEach(r => {
-    const dow = r.dt.getDay();
-    const idx = dow===0?6:dow-1;
-    if (r.isSignup) dayCounts[idx]++;
-  });
-  chartInstances['donut'] = new Chart(document.getElementById('cDonut'), {
+  
+  const yearBorders = yearColors.map(c => c.replace('0.85', '1'));
+  
+  chartInstances['yearAdmission'] = new Chart(document.getElementById('cYearAdmission'), {
     type:'bar', plugins:[labelPlugin()],
-    data:{ labels:dayLabels, datasets:[{ label:'Sign Ups', data:dayCounts,
-      backgroundColor:dayCounts.map(v=>{ const max=Math.max(...dayCounts); const intensity=max?v/max:0; return `rgba(37,99,235,${0.25+intensity*0.65})`; }),
-      borderColor:BLUE, borderWidth:1, borderRadius:6, borderSkipped:false }] },
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{padding:10,cornerRadius:8} },
-      scales:{ x:{grid:{display:false},ticks:{color:TICK,font:{size:12}}}, y:{grid:{color:GRID},ticks:ticksY,beginAtZero:true} }
+    data:{ 
+      labels: yearAdmData.labels,
+      datasets:[{ 
+        label:'Sign Ups', 
+        data: yearAdmData.data,
+        backgroundColor: yearColors,
+        borderColor: yearBorders,
+        borderWidth:1.5, 
+        borderRadius:5, 
+        borderSkipped:false 
+      }] 
+    },
+    options:{ 
+      responsive:true, 
+      maintainAspectRatio:false,
+      plugins:{ 
+        legend:{display:false}, 
+        tooltip:{
+          padding:10,
+          cornerRadius:8,
+          backgroundColor:'rgba(0,0,0,0.85)',
+          titleFont:{size:12, weight:'bold'},
+          bodyFont:{size:11}
+        } 
+      },
+      scales:{ 
+        x:{
+          grid:{display:false},
+          ticks:{color:TICK,font:{size:11}, maxRotation:45, autoSkip:false}
+        }, 
+        y:{
+          grid:{color:GRID},
+          ticks:{color:TICK, font:{size:11},beginAtZero:true} 
+        } 
+      }
     }
   });
 }
