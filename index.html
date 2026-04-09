@@ -250,7 +250,7 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
     detectSessionInUrl: true,
     persistSession: true,
     autoRefreshToken: true,
-    flowType: 'pkce',
+    flowType: 'implicit',
     storage: localStorage
   }
 });
@@ -353,43 +353,57 @@ async function initAuth() {
 }
 
 // ── AUTH STATE LISTENER ──
-let authHandled = false;
-
-// ── AUTH STATE LISTENER ──
 sb.auth.onAuthStateChange(async (event, session) => {
-  console.log('🔐 Auth event:', event);
+  console.log('🔐 Auth event:', event, 'Session:', !!session);
   
-  if (session) {
+  if (event === 'SIGNED_IN' && session && !authHandled) {
+    console.log('✅ User signed in');
     authHandled = true;
-    // Only initialize if we aren't already looking at the dashboard
-    if (document.getElementById('dashboardPage').style.display !== 'block') {
-      await initAuth();
-    }
-  } else if (event === 'SIGNED_OUT') {
+    window.history.replaceState(null, '', window.location.pathname);
+    await initAuth();
+  } 
+  else if (event === 'TOKEN_REFRESHED') {
+    console.log('🔄 Token refreshed');
+    // Session is maintained automatically
+  }
+  else if (event === 'SIGNED_OUT') {
+    console.log('❌ User signed out');
     authHandled = false;
     showPage('login');
   }
 });
 
-// ── BOOT LOGIC ──
+// ── BOOT - ENHANCED SESSION HANDLING ──
+let bootComplete = false;
+
 async function bootApp() {
-  if (window.location.hash.includes('access_token')) return; // Let Supabase handle the redirect
+  if (bootComplete) return;
+  bootComplete = true;
+  
+  console.log('🚀 App booting...');
   
   try {
-    const { data: { session } } = await sb.auth.getSession();
+    // Give Supabase time to load session from storage
+    await new Promise(resolve => setTimeout(resolve, 200));
     
-    if (session) {
+    const { data: { session }, error } = await sb.auth.getSession();
+    
+    if (error) {
+      console.error('❌ Session check error:', error);
+      showPage('login');
+      return;
+    }
+    
+    if (session && !authHandled) {
+      console.log('✅ Session found on boot, initializing...');
       authHandled = true;
       await initAuth();
-    } else {
-      // Wait 1 second to see if onAuthStateChange picks up a session 
-      // (sometimes required for OAuth persistence)
-      setTimeout(() => {
-        if (!authHandled) showPage('login');
-      }, 1000);
+    } else if (!session) {
+      console.log('ℹ️  No session on boot');
+      showPage('login');
     }
   } catch (err) {
-    console.error('Boot error:', err);
+    console.error('❌ Boot error:', err);
     showPage('login');
   }
 }
@@ -401,6 +415,8 @@ if (document.readyState === 'loading') {
   bootApp();
 }
 
+// ── AUTH STATE TRACKING ──
+let authHandled = false;
 
 // ── DASHBOARD LOGIC ──
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR_-2XkH8w9vaODhrkjtkMI-qA1oefVdRTG4go9l3jV3xKoQR2tLXAQvBfybQhiK2ThzXx-zDCjN4ff/pub?gid=0&single=true&output=csv';
