@@ -250,7 +250,7 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
     detectSessionInUrl: true,
     persistSession: true,
     autoRefreshToken: true,
-    flowType: 'implicit',
+    flowType: 'pkce',
     storage: localStorage
   }
 });
@@ -417,6 +417,50 @@ if (document.readyState === 'loading') {
 
 // ── AUTH STATE TRACKING ──
 let authHandled = false;
+
+// ── ENHANCED AUTH LISTENER ──
+sb.auth.onAuthStateChange(async (event, session) => {
+  console.log('🔐 Auth event:', event);
+  
+  if (session) {
+    authHandled = true;
+    // Prevent the "pending" check from looping if already on dashboard
+    if (document.getElementById('dashboardPage').style.display !== 'block') {
+      await initAuth();
+    }
+  } else {
+    authHandled = false;
+    showPage('login');
+  }
+});
+
+// ── IMPROVED BOOT LOGIC ──
+async function bootApp() {
+  console.log('🚀 App booting...');
+  
+  try {
+    // 1. Try to get the session immediately
+    const { data: { session } } = await sb.auth.getSession();
+    
+    if (session) {
+      console.log('✅ Session found on boot');
+      authHandled = true;
+      await initAuth();
+    } else {
+      // 2. If no session, wait a brief moment for OAuth redirect processing
+      // then show login if still nothing
+      setTimeout(() => {
+        if (!authHandled) {
+          console.log('ℹ️ No session after wait, showing login');
+          showPage('login');
+        }
+      }, 1000); 
+    }
+  } catch (err) {
+    console.error('❌ Boot error:', err);
+    showPage('login');
+  }
+}
 
 // ── DASHBOARD LOGIC ──
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR_-2XkH8w9vaODhrkjtkMI-qA1oefVdRTG4go9l3jV3xKoQR2tLXAQvBfybQhiK2ThzXx-zDCjN4ff/pub?gid=0&single=true&output=csv';
