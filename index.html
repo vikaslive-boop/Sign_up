@@ -133,6 +133,38 @@
   .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #64748b; }
   .legend-sq { width: 10px; height: 10px; border-radius: 3px; }
 
+  .heatmap-wrapper { overflow-x: auto; margin-top: 12px; }
+  .heatmap-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
+    gap: 4px;
+    padding: 12px;
+    background: #f5f6f8;
+    border-radius: 8px;
+  }
+  .heatmap-cell {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+    transition: transform 0.2s;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  }
+  .heatmap-cell:hover { transform: scale(1.1); }
+  .heatmap-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-align: center;
+    padding: 4px 0;
+  }
+
   .loading-state { text-align: center; padding: 80px 20px; color: #94a3b8; }
   .loading-state .spinner { width: 32px; height: 32px; border: 3px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 16px; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -395,7 +427,9 @@ let chartInstances = {};
 function parseDate(str) {
   if (!str) return null;
   str = str.trim();
-  let m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  let m = str.match(/^(\d{1,2})[\/\-](\d{2,4})$/);
+  if (m) { let y = +m[2]; if (y < 100) y += 2000; return new Date(y, +m[1]-1, 1); }
+  m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if (m) { let y = +m[3]; if (y < 100) y += 2000; return new Date(y, +m[2]-1, +m[1]); }
   const d = new Date(str);
   return isNaN(d) ? null : d;
@@ -432,6 +466,45 @@ function processData(raw) {
       week: +week || getWeekNum(dt), day: dt.toISOString().slice(0,10),
     });
   });
+
+  // Extract year of admission data
+  window.admissionYearData = {};
+  window.admissionYearMonthly = {};
+
+  raw.forEach(r => {
+    const keys = Object.keys(r);
+    const type = (r[keys[0]] || '').trim();
+    if (!type || type === 'Download status') return;
+    
+    let dateStr = r['created_on'] || r['Created_on'] || Object.values(r)[1] || '';
+    const dt = parseDate(dateStr);
+    if (!dt || dt < new Date(2025, 0, 1)) return;
+    
+    let admYear = r['year_of_admission'] || r['Year_of_admission'] || Object.values(r)[5] || '';
+    admYear = String(admYear).trim();
+    
+    if (!admYear || admYear === 'NA' || admYear === '') return;
+    
+    // Track admission year counts
+    if (!window.admissionYearData[admYear]) {
+      window.admissionYearData[admYear] = 0;
+    }
+    window.admissionYearData[admYear]++;
+    
+    // Track monthly breakdown by admission year
+    const monthKey = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+    const yearMonthKey = admYear + '|' + monthKey;
+    
+    if (!window.admissionYearMonthly[yearMonthKey]) {
+      window.admissionYearMonthly[yearMonthKey] = 0;
+    }
+    window.admissionYearMonthly[yearMonthKey]++;
+  });
+
+  // Initialize admission year data containers if not already done
+  if (!window.admissionYearData) window.admissionYearData = {};
+  if (!window.admissionYearMonthly) window.admissionYearMonthly = {};
+
   populateFilters();
   renderDashboard();
 }
@@ -575,6 +648,173 @@ function labelPlugin() {
   };
 }
 
+function renderCohortCharts() {
+  // ─── COHORT BUBBLE/SCATTER CHART ───
+  const admYears = Object.keys(window.admissionYearData || {})
+    .filter(y => y !== 'NA' && y !== '')
+    .sort((a, b) => b - a);
+  
+  const cohortCounts = admYears.map(y => window.admissionYearData[y]);
+  const maxCount = Math.max(...cohortCounts, 1);
+  
+  const bubbleColors = admYears.map((y, i) => {
+    const hue = (i * 360 / admYears.length) % 360;
+    return `hsl(${hue}, 65%, 50%)`;
+  });
+  
+  destroyChart('cohort');
+  if (admYears.length > 0) {
+    chartInstances['cohort'] = new Chart(document.getElementById('cCohort'), {
+      type: 'bubble',
+      data: {
+        datasets: admYears.map((year, idx) => ({
+          label: 'Admission Year ' + year,
+          data: [{
+            x: idx,
+            y: cohortCounts[idx],
+            r: Math.sqrt(cohortCounts[idx]) * 2 + 5
+          }],
+          backgroundColor: bubbleColors[idx],
+          borderColor: bubbleColors[idx],
+          borderWidth: 2
+        }))
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) {
+                return 'Year ' + admYears[ctx.datasetIndex] + ': ' + cohortCounts[ctx.datasetIndex].toLocaleString() + ' sign-ups';
+              }
+            }
+          }
+        },
+        scales: {
+          x: { display: false },
+          y: {
+            beginAtZero: true,
+            grid: { color: GRID },
+            ticks: { color: TICK, font: { size: 11 } },
+            title: { display: true, text: 'Sign Ups', color: TICK }
+          }
+        }
+      }
+    });
+  }
+  
+  // ─── TOP 10 ADMISSION YEARS (HORIZONTAL BAR) ───
+  const sortedYears = Object.entries(window.admissionYearData || {})
+    .filter(([y]) => y !== 'NA' && y !== '')
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+  
+  const topYears = sortedYears.map(([y]) => y);
+  const topCounts = sortedYears.map(([, c]) => c);
+  
+  destroyChart('topYears');
+  if (topYears.length > 0) {
+    const gradient = (ctx) => {
+      const canvas = ctx.canvas;
+      const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+      gradient.addColorStop(0, '#2563eb');
+      gradient.addColorStop(1, '#0ea5e9');
+      return gradient;
+    };
+    
+    chartInstances['topYears'] = new Chart(document.getElementById('cTopYears'), {
+      type: 'bar',
+      plugins: [labelPlugin()],
+      data: {
+        labels: topYears.map(y => 'Year ' + y),
+        datasets: [{
+          label: 'Sign Ups',
+          data: topCounts,
+          backgroundColor: function(ctx) {
+            if (!ctx.canvas) return '#2563eb';
+            return gradient(ctx.canvas.getContext('2d'));
+          },
+          borderColor: '#2563eb',
+          borderWidth: 1,
+          borderRadius: 6,
+          borderSkipped: false
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { padding: 10, cornerRadius: 8 }
+        },
+        scales: {
+          x: { grid: { color: GRID }, ticks: { color: TICK, font: { size: 11 } }, beginAtZero: true },
+          y: { grid: { display: false }, ticks: { color: TICK, font: { size: 11 } } }
+        },
+        layout: { padding: { left: 20 } }
+      }
+    });
+  }
+  
+  // ─── HEATMAP: ADMISSION YEARS × MONTHS ───
+  renderHeatmap();
+}
+
+function renderHeatmap() {
+  const allMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const admYears = Object.keys(window.admissionYearData || {})
+    .filter(y => y !== 'NA' && y !== '')
+    .sort((a, b) => b - a)
+    .slice(0, 15); // Top 15 years
+  
+  const heatmapData = {};
+  admYears.forEach(year => {
+    heatmapData[year] = Array(12).fill(0);
+  });
+  
+  // Populate heatmap data
+  Object.entries(window.admissionYearMonthly || {}).forEach(([key, count]) => {
+    const [year, monthStr] = key.split('|');
+    if (admYears.includes(year)) {
+      const month = parseInt(monthStr) - 1;
+      if (month >= 0 && month < 12) {
+        heatmapData[year][month] = count;
+      }
+    }
+  });
+  
+  // Find max value for color scaling
+  const allValues = Object.values(heatmapData).flat();
+  const maxVal = Math.max(...allValues, 1);
+  
+  // Render HTML heatmap
+  const container = document.getElementById('heatmapContainer');
+  let html = '<div style="overflow-x:auto;"><table style="border-collapse:collapse;margin:12px 0;"><tr><td style="width:60px;"></td>';
+  
+  // Month headers
+  allMonths.forEach(m => {
+    html += `<td style="text-align:center;padding:4px;font-size:10px;font-weight:600;color:#64748b;width:35px;">${m}</td>`;
+  });
+  html += '</tr>';
+  
+  // Year rows
+  admYears.forEach(year => {
+    html += `<tr><td style="padding:4px;font-size:11px;font-weight:600;color:#1a1a2e;text-align:right;width:60px;">${year}</td>`;
+    heatmapData[year].forEach((count, monthIdx) => {
+      const intensity = maxVal ? count / maxVal : 0;
+      const color = `hsl(212, ${70 + intensity * 30}%, ${85 - intensity * 35}%)`;
+      html += `<td style="background:${color};border:1px solid #e8eaed;padding:4px;text-align:center;font-size:9px;font-weight:600;color:${intensity>0.5?'white':'#64748b'};width:35px;cursor:pointer;border-radius:4px;" title="Year ${year}, Month ${allMonths[monthIdx]}: ${count}">${count > 0 ? count : ''}</td>`;
+    });
+    html += '</tr>';
+  });
+  
+  html += '</table></div>';
+  container.innerHTML = html;
+}
+
 function renderDashboard() {
   updateMonthFilter();
   updateActiveTags();
@@ -639,6 +879,30 @@ function renderDashboard() {
         </div>
         <div style="position:relative;height:260px"><canvas id="cDonut"></canvas></div>
       </div>
+      <div class="chart-card full">
+        <div class="chart-header">
+          <div class="chart-title">Year of Admission Distribution — Cohort Analysis</div>
+          <div class="chart-sub">Which admission year drives the most sign-ups</div>
+        </div>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-sq" style="background: linear-gradient(135deg, #2563eb, #0ea5e9);"></div>Sign Ups by Admission Year</div>
+        </div>
+        <div style="position:relative;height:280px"><canvas id="cCohort"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Top 10 Admission Years</div>
+          <div class="chart-sub">Ranked by activity</div>
+        </div>
+        <div style="position:relative;height:300px"><canvas id="cTopYears"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Year of Admission Heatmap</div>
+          <div class="chart-sub">Monthly distribution across cohorts</div>
+        </div>
+        <div id="heatmapContainer" style="overflow-x:auto;"><canvas id="cHeatmap"></canvas></div>
+      </div>
     </div>
   `;
 
@@ -691,6 +955,9 @@ function renderDashboard() {
       scales:{ x:{grid:{display:false},ticks:{color:TICK,font:{size:12}}}, y:{grid:{color:GRID},ticks:ticksY,beginAtZero:true} }
     }
   });
+
+  // Render cohort charts
+  renderCohortCharts();
 }
 
 function attachListeners() {
