@@ -247,21 +247,24 @@ const ADMIN_EMAILS  = ['vikas.singh@dbmci.one', 'daniel.paul@egurukulapp.com'];
 const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: {
+    detectSessionInUrl: true,
     persistSession: true,
     autoRefreshToken: true,
-    storage: window.localStorage,
-    storageKey: 'sb-auth' // 👈 ADD THIS
+    flowType: 'implicit',
+    storage: localStorage
   }
 });
 
 // ── AUTH FLOW ──
 async function signInWithGoogle() {
   const { error } = await sb.auth.signInWithOAuth({
-  provider: 'google',
-  options: { 
-    redirectTo: window.location.href
-  }
-});
+    provider: 'google',
+    options: { 
+      redirectTo: 'https://vikaslive-boop.github.io/Sign_up/',
+      skipBrowserRedirect: false
+    }
+  });
+  if (error) alert('Login failed: ' + error.message);
 }
 
 async function signOut() {
@@ -356,6 +359,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN' && session && !authHandled) {
     console.log('✅ User signed in');
     authHandled = true;
+    window.history.replaceState(null, '', window.location.pathname);
     await initAuth();
   } 
   else if (event === 'TOKEN_REFRESHED') {
