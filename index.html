@@ -260,7 +260,7 @@ async function signInWithGoogle() {
   const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
     options: { 
-      redirectTo: 'https://vikaslive-boop.github.io/Sign_up/',
+      redirectTo: window.location.origin + window.location.pathname,
       skipBrowserRedirect: false
     }
   });
@@ -356,6 +356,12 @@ async function initAuth() {
 sb.auth.onAuthStateChange(async (event, session) => {
   console.log('🔐 Auth event:', event, 'Session:', !!session);
   
+  // Only handle auth events after boot is complete
+  if (!authStateListenerReady) {
+    console.log('⏳ Skipping auth event, boot not ready yet');
+    return;
+  }
+  
   if (event === 'SIGNED_IN' && session && !authHandled) {
     console.log('✅ User signed in');
     authHandled = true;
@@ -375,6 +381,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
 
 // ── BOOT - ENHANCED SESSION HANDLING ──
 let bootComplete = false;
+let authStateListenerReady = false;
 
 async function bootApp() {
   if (bootComplete) return;
@@ -383,8 +390,8 @@ async function bootApp() {
   console.log('🚀 App booting...');
   
   try {
-    // Give Supabase time to load session from storage
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // Give Supabase time to restore session from storage and set up auth listener
+    await new Promise(resolve => setTimeout(resolve, 300));
     
     const { data: { session }, error } = await sb.auth.getSession();
     
@@ -399,9 +406,11 @@ async function bootApp() {
       authHandled = true;
       await initAuth();
     } else if (!session) {
-      console.log('ℹ️  No session on boot');
+      console.log('ℹ️  No session on boot, showing login');
       showPage('login');
     }
+    
+    authStateListenerReady = true;
   } catch (err) {
     console.error('❌ Boot error:', err);
     showPage('login');
