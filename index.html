@@ -353,57 +353,43 @@ async function initAuth() {
 }
 
 // ── AUTH STATE LISTENER ──
+let authHandled = false;
+
+// ── AUTH STATE LISTENER ──
 sb.auth.onAuthStateChange(async (event, session) => {
-  console.log('🔐 Auth event:', event, 'Session:', !!session);
+  console.log('🔐 Auth event:', event);
   
-  if (event === 'SIGNED_IN' && session && !authHandled) {
-    console.log('✅ User signed in');
+  if (session) {
     authHandled = true;
-    window.history.replaceState(null, '', window.location.pathname);
-    await initAuth();
-  } 
-  else if (event === 'TOKEN_REFRESHED') {
-    console.log('🔄 Token refreshed');
-    // Session is maintained automatically
-  }
-  else if (event === 'SIGNED_OUT') {
-    console.log('❌ User signed out');
+    // Only initialize if we aren't already looking at the dashboard
+    if (document.getElementById('dashboardPage').style.display !== 'block') {
+      await initAuth();
+    }
+  } else if (event === 'SIGNED_OUT') {
     authHandled = false;
     showPage('login');
   }
 });
 
-// ── BOOT - ENHANCED SESSION HANDLING ──
-let bootComplete = false;
-
+// ── BOOT LOGIC ──
 async function bootApp() {
-  if (bootComplete) return;
-  bootComplete = true;
-  
-  console.log('🚀 App booting...');
+  if (window.location.hash.includes('access_token')) return; // Let Supabase handle the redirect
   
   try {
-    // Give Supabase time to load session from storage
-    await new Promise(resolve => setTimeout(resolve, 200));
+    const { data: { session } } = await sb.auth.getSession();
     
-    const { data: { session }, error } = await sb.auth.getSession();
-    
-    if (error) {
-      console.error('❌ Session check error:', error);
-      showPage('login');
-      return;
-    }
-    
-    if (session && !authHandled) {
-      console.log('✅ Session found on boot, initializing...');
+    if (session) {
       authHandled = true;
       await initAuth();
-    } else if (!session) {
-      console.log('ℹ️  No session on boot');
-      showPage('login');
+    } else {
+      // Wait 1 second to see if onAuthStateChange picks up a session 
+      // (sometimes required for OAuth persistence)
+      setTimeout(() => {
+        if (!authHandled) showPage('login');
+      }, 1000);
     }
   } catch (err) {
-    console.error('❌ Boot error:', err);
+    console.error('Boot error:', err);
     showPage('login');
   }
 }
@@ -415,52 +401,6 @@ if (document.readyState === 'loading') {
   bootApp();
 }
 
-// ── AUTH STATE TRACKING ──
-let authHandled = false;
-
-// ── ENHANCED AUTH LISTENER ──
-sb.auth.onAuthStateChange(async (event, session) => {
-  console.log('🔐 Auth event:', event);
-  
-  if (session) {
-    authHandled = true;
-    // Prevent the "pending" check from looping if already on dashboard
-    if (document.getElementById('dashboardPage').style.display !== 'block') {
-      await initAuth();
-    }
-  } else {
-    authHandled = false;
-    showPage('login');
-  }
-});
-
-// ── IMPROVED BOOT LOGIC ──
-async function bootApp() {
-  console.log('🚀 App booting...');
-  
-  try {
-    // 1. Try to get the session immediately
-    const { data: { session } } = await sb.auth.getSession();
-    
-    if (session) {
-      console.log('✅ Session found on boot');
-      authHandled = true;
-      await initAuth();
-    } else {
-      // 2. If no session, wait a brief moment for OAuth redirect processing
-      // then show login if still nothing
-      setTimeout(() => {
-        if (!authHandled) {
-          console.log('ℹ️ No session after wait, showing login');
-          showPage('login');
-        }
-      }, 1000); 
-    }
-  } catch (err) {
-    console.error('❌ Boot error:', err);
-    showPage('login');
-  }
-}
 
 // ── DASHBOARD LOGIC ──
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR_-2XkH8w9vaODhrkjtkMI-qA1oefVdRTG4go9l3jV3xKoQR2tLXAQvBfybQhiK2ThzXx-zDCjN4ff/pub?gid=0&single=true&output=csv';
