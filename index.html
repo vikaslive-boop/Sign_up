@@ -247,20 +247,21 @@ const ADMIN_EMAILS  = ['vikas.singh@dbmci.one', 'daniel.paul@egurukulapp.com'];
 const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: {
-  persistSession: true,
-  autoRefreshToken: true,
-  storage: localStorage
-}
+    persistSession: true,
+    autoRefreshToken: true,
+    storage: window.localStorage,
+    storageKey: 'sb-auth' // 👈 ADD THIS
+  }
 });
 
 // ── AUTH FLOW ──
 async function signInWithGoogle() {
   const { error } = await sb.auth.signInWithOAuth({
-    provider: 'google',
-    options: { 
-      redirectTo: window.location.origin + window.location.pathname
-    }
-  });
+  provider: 'google',
+  options: { 
+    redirectTo: window.location.href
+  }
+});
 }
 
 async function signOut() {
