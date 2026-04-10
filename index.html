@@ -436,13 +436,22 @@ let chartInstances = {};
 function parseDate(str) {
   if (!str) return null;
   str = str.trim();
-  // Format is DD/MM/YYYY
-  let m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  
+  // Try DD/MM/YYYY format first
+  let m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (m) { 
-    let y = +m[3]; 
-    if (y < 100) y += 2000; 
-    return new Date(y, +m[2]-1, +m[1]);  // m[1]=day, m[2]=month, m[3]=year
+    let day = +m[1];
+    let month = +m[2];
+    let year = +m[3];
+    
+    // Validate: if month > 12, swap day and month (it was actually MM/DD)
+    if (month > 12) {
+      [day, month] = [month, day];
+    }
+    
+    return new Date(year, month - 1, day);
   }
+  
   const d = new Date(str);
   return isNaN(d) ? null : d;
 }
