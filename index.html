@@ -148,9 +148,22 @@
 </style>
 </head>
 <body>
+ <div id="loadingScreen" style="
+  position:fixed;
+  inset:0;
+  background:#f5f6f8;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+  font-family:sans-serif;
+  color:#64748b;
+">
+  Loading...
+</div>
 
 <!-- LOGIN PAGE -->
-<div id="loginPage" style="display:flex;">
+<div id="loginPage" style="display:none;">
   <div class="login-card">
     <div class="login-logo">Activity <span>Dashboard</span></div>
     <div class="login-sub">Sign in to access the dashboard</div>
