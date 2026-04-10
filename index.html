@@ -485,7 +485,7 @@ function processData(raw) {
     allRows.push({
       type, isSignup: /sign.?up/i.test(type), isSignin: /sign.?in/i.test(type),
       dt, year: +year || dt.getFullYear(), month: +month || dt.getMonth()+1,
-      week: +week || getWeekNum(dt), day: dt.toISOString().slice(0,10),
+      week: +week || getWeekNum(dt), day: dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0'),
       yearOfAdmission: yearOfAdmission ? String(yearOfAdmission).trim() : 'Unknown'
     });
   });
