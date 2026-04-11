@@ -7,11 +7,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f6f8; color: #1a1a2e; min-height: 100vh; }
 
-  /* ── LOGIN PAGE ── */
   #loginPage {
     min-height: 100vh; display: flex; align-items: center; justify-content: center;
     background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
@@ -34,7 +34,6 @@
   .btn-google img { width: 22px; height: 22px; }
   .login-note { font-size: 12px; color: #94a3b8; margin-top: 20px; }
 
-  /* ── PENDING PAGE ── */
   #pendingPage {
     min-height: 100vh; display: none; align-items: center; justify-content: center;
     background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
@@ -53,7 +52,6 @@
   }
   .btn-signout:hover { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
 
-  /* ── DASHBOARD ── */
   #dashboardPage { display: none; }
 
   header {
@@ -133,11 +131,85 @@
   .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #64748b; }
   .legend-sq { width: 10px; height: 10px; border-radius: 3px; }
 
+  /* ── INDIA MAP STYLES ── */
+  .map-container {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 20px;
+    align-items: start;
+  }
+  #indiaMapSvg {
+    width: 100%;
+    height: 520px;
+  }
+  #indiaMapSvg path {
+    stroke: #fff;
+    stroke-width: 0.8;
+    cursor: pointer;
+    transition: opacity 0.15s, stroke-width 0.15s;
+  }
+  #indiaMapSvg path:hover {
+    stroke-width: 2;
+    stroke: #1a1a2e;
+    opacity: 0.85;
+  }
+  .map-tooltip {
+    position: fixed;
+    background: rgba(15,23,42,0.95);
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    pointer-events: none;
+    z-index: 9999;
+    display: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    backdrop-filter: blur(4px);
+    min-width: 160px;
+  }
+  .map-tooltip .tt-state { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .map-tooltip .tt-count { color: #93c5fd; font-size: 13px; }
+
+  .map-legend-panel { padding: 4px 0; }
+  .map-legend-title { font-size: 12px; font-weight: 700; color: #1a1a2e; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .map-color-scale {
+    width: 100%;
+    height: 14px;
+    border-radius: 7px;
+    margin-bottom: 6px;
+    background: linear-gradient(to right, #dbeafe, #1d4ed8);
+  }
+  .map-scale-labels { display: flex; justify-content: space-between; font-size: 11px; color: #64748b; margin-bottom: 20px; }
+
+  .state-list { max-height: 380px; overflow-y: auto; }
+  .state-list::-webkit-scrollbar { width: 4px; }
+  .state-list::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+  .state-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  .state-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 8px; border-radius: 6px; margin-bottom: 2px;
+    transition: background 0.15s; cursor: default;
+    font-size: 12px;
+  }
+  .state-row:hover { background: #f1f5f9; }
+  .state-row-left { display: flex; align-items: center; gap: 8px; }
+  .state-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .state-name { color: #374151; font-weight: 500; }
+  .state-count { color: #64748b; font-weight: 600; font-size: 12px; }
+  .state-rank { font-size: 10px; color: #94a3b8; width: 18px; text-align: right; }
+
+  .map-no-data { font-size: 12px; color: #94a3b8; font-style: italic; }
+
   .loading-state { text-align: center; padding: 80px 20px; color: #94a3b8; }
   .loading-state .spinner { width: 32px; height: 32px; border: 3px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 16px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .error-state { text-align: center; padding: 60px 20px; color: #ef4444; }
 
+  @media (max-width: 900px) {
+    .map-container { grid-template-columns: 1fr; }
+    #indiaMapSvg { height: 380px; }
+    .state-list { max-height: 240px; }
+  }
   @media (max-width: 700px) {
     .main { padding: 16px; }
     header { padding: 14px 16px; }
@@ -238,6 +310,12 @@
   </div>
 </div>
 
+<!-- MAP TOOLTIP -->
+<div class="map-tooltip" id="mapTooltip">
+  <div class="tt-state" id="ttState"></div>
+  <div class="tt-count" id="ttCount"></div>
+</div>
+
 <script>
 // ── SUPABASE SETUP ──
 const SUPABASE_URL  = 'https://gbodnshovsgaisfvxjnz.supabase.co';
@@ -255,7 +333,6 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
   }
 });
 
-// ── AUTH FLOW ──
 async function signInWithGoogle() {
   const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
@@ -278,7 +355,6 @@ async function checkAccess(email) {
     .select('approved')
     .eq('email', email)
     .single();
-
   if (error || !data) return false;
   return data.approved === true;
 }
@@ -289,11 +365,9 @@ async function requestAccess(user) {
     .select('email')
     .eq('email', user.email)
     .single();
-
   if (!existing) {
     await sb.from('approved_emails').insert({ email: user.email, approved: false });
   }
-
   await notifyAdmins(user);
 }
 
@@ -301,20 +375,12 @@ async function notifyAdmins(user) {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/notify-admin`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON}`
-      },
-      body: JSON.stringify({
-        requesterEmail: user.email,
-        requesterName: user.user_metadata?.full_name || user.email
-      })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON}` },
+      body: JSON.stringify({ requesterEmail: user.email, requesterName: user.user_metadata?.full_name || user.email })
     });
     const data = await res.json();
     console.log('Notification result:', data);
-  } catch(e) {
-    console.error('Notification error:', e);
-  }
+  } catch(e) { console.error('Notification error:', e); }
 }
 
 function showPage(page) {
@@ -325,16 +391,10 @@ function showPage(page) {
 
 async function initAuth() {
   const { data: { session } } = await sb.auth.getSession();
-
-  if (!session) {
-    showPage('login');
-    return;
-  }
-
+  if (!session) { showPage('login'); return; }
   const user  = session.user;
   const email = user.email;
   const allowed = await checkAccess(email);
-
   if (allowed) {
     showPage('dashboard');
     const avatarEl = document.getElementById('userAvatar');
@@ -342,7 +402,6 @@ async function initAuth() {
     if (avatar) avatarEl.innerHTML = `<img src="${avatar}" alt="avatar"/>`;
     else avatarEl.textContent = email[0].toUpperCase();
     document.getElementById('userEmail').textContent = email;
-
     attachListeners();
     fetchData();
     setInterval(fetchData, 60000);
@@ -352,106 +411,119 @@ async function initAuth() {
   }
 }
 
-// ── AUTH STATE LISTENER ──
 sb.auth.onAuthStateChange(async (event, session) => {
-  console.log('🔐 Auth event:', event, 'Session:', !!session);
-  
-  // Only handle auth events after boot is complete
-  if (!authStateListenerReady) {
-    console.log('⏳ Skipping auth event, boot not ready yet');
-    return;
-  }
-  
+  if (!authStateListenerReady) return;
   if (event === 'SIGNED_IN' && session && !authHandled) {
-    console.log('✅ User signed in');
     authHandled = true;
     window.history.replaceState(null, '', window.location.pathname);
     await initAuth();
-  } 
-  else if (event === 'TOKEN_REFRESHED') {
-    console.log('🔄 Token refreshed');
-    // Session is maintained automatically
-  }
-  else if (event === 'SIGNED_OUT') {
-    console.log('❌ User signed out');
+  } else if (event === 'TOKEN_REFRESHED') {
+    // maintained
+  } else if (event === 'SIGNED_OUT') {
     authHandled = false;
     showPage('login');
   }
 });
 
-// ── BOOT - ENHANCED SESSION HANDLING ──
 let bootComplete = false;
 let authStateListenerReady = false;
+let authHandled = false;
 
 async function bootApp() {
   if (bootComplete) return;
   bootComplete = true;
-  
-  console.log('🚀 App booting...');
-  
   try {
-    // Give Supabase time to restore session from storage and set up auth listener
     await new Promise(resolve => setTimeout(resolve, 300));
-    
     const { data: { session }, error } = await sb.auth.getSession();
-    
-    if (error) {
-      console.error('❌ Session check error:', error);
-      showPage('login');
-      return;
-    }
-    
-    if (session && !authHandled) {
-      console.log('✅ Session found on boot, initializing...');
-      authHandled = true;
-      await initAuth();
-    } else if (!session) {
-      console.log('ℹ️  No session on boot, showing login');
-      showPage('login');
-    }
-    
+    if (error) { showPage('login'); return; }
+    if (session && !authHandled) { authHandled = true; await initAuth(); }
+    else if (!session) { showPage('login'); }
     authStateListenerReady = true;
-  } catch (err) {
-    console.error('❌ Boot error:', err);
-    showPage('login');
-  }
+  } catch (err) { showPage('login'); }
 }
 
-// Call boot on page load
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', bootApp);
 } else {
   bootApp();
 }
 
-// ── AUTH STATE TRACKING ──
-let authHandled = false;
-
 // ── DASHBOARD LOGIC ──
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR_-2XkH8w9vaODhrkjtkMI-qA1oefVdRTG4go9l3jV3xKoQR2tLXAQvBfybQhiK2ThzXx-zDCjN4ff/pub?gid=0&single=true&output=csv';
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 let allRows = [];
 let chartInstances = {};
+let indiaGeoJSON = null;
+
+// State name normalization map — handles common variations in data
+const STATE_NAME_MAP = {
+  'andaman & nicobar islands': 'Andaman & Nicobar Islands',
+  'andaman and nicobar': 'Andaman & Nicobar Islands',
+  'andaman and nicobar islands': 'Andaman & Nicobar Islands',
+  'andhra pradesh': 'Andhra Pradesh',
+  'arunachal pradesh': 'Arunachal Pradesh',
+  'assam': 'Assam',
+  'bihar': 'Bihar',
+  'chandigarh': 'Chandigarh',
+  'chhattisgarh': 'Chhattisgarh',
+  'chattisgarh': 'Chhattisgarh',
+  'dadra and nagar haveli': 'Dadra & Nagar Haveli',
+  'dadra & nagar haveli': 'Dadra & Nagar Haveli',
+  'dadra and nagar haveli and daman and diu': 'Dadra & Nagar Haveli',
+  'daman and diu': 'Daman & Diu',
+  'daman & diu': 'Daman & Diu',
+  'delhi': 'Delhi',
+  'new delhi': 'Delhi',
+  'goa': 'Goa',
+  'gujarat': 'Gujarat',
+  'haryana': 'Haryana',
+  'himachal pradesh': 'Himachal Pradesh',
+  'jammu & kashmir': 'Jammu & Kashmir',
+  'jammu and kashmir': 'Jammu & Kashmir',
+  'jharkhand': 'Jharkhand',
+  'karnataka': 'Karnataka',
+  'kerala': 'Kerala',
+  'ladakh': 'Ladakh',
+  'lakshadweep': 'Lakshadweep',
+  'madhya pradesh': 'Madhya Pradesh',
+  'maharashtra': 'Maharashtra',
+  'manipur': 'Manipur',
+  'meghalaya': 'Meghalaya',
+  'mizoram': 'Mizoram',
+  'nagaland': 'Nagaland',
+  'odisha': 'Odisha',
+  'orissa': 'Odisha',
+  'puducherry': 'Pondicherry',
+  'pondicherry': 'Pondicherry',
+  'punjab': 'Punjab',
+  'rajasthan': 'Rajasthan',
+  'sikkim': 'Sikkim',
+  'tamil nadu': 'Tamil Nadu',
+  'tamilnadu': 'Tamil Nadu',
+  'telangana': 'Telangana',
+  'tripura': 'Tripura',
+  'uttar pradesh': 'Uttar Pradesh',
+  'uttarakhand': 'Uttarakhand',
+  'uttaranchal': 'Uttarakhand',
+  'west bengal': 'West Bengal',
+};
+
+function normalizeState(s) {
+  if (!s) return null;
+  const cleaned = s.trim().toLowerCase();
+  if (!cleaned || cleaned === 'na' || cleaned === 'n/a' || cleaned === '#n/a' || cleaned === 'unknown' || cleaned === '') return null;
+  return STATE_NAME_MAP[cleaned] || (s.trim().length > 1 ? s.trim() : null);
+}
 
 function parseDate(str) {
   if (!str) return null;
   str = str.trim();
-  
-  // Try DD/MM/YYYY format first
   let m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (m) { 
-    let day = +m[1];
-    let month = +m[2];
-    let year = +m[3];
-    
-    // Validate: if month > 12, swap day and month (it was actually MM/DD)
-    if (month > 12) {
-      [day, month] = [month, day];
-    }
-    
+  if (m) {
+    let day = +m[1], month = +m[2], year = +m[3];
+    if (month > 12) { [day, month] = [month, day]; }
     return new Date(year, month - 1, day);
   }
-  
   const d = new Date(str);
   return isNaN(d) ? null : d;
 }
@@ -482,11 +554,15 @@ function processData(raw) {
     let month = r['created_month'] || r['Created_month'] || Object.values(r)[3] || '';
     let year  = r['created_year']  || r['Created_year']  || Object.values(r)[4] || dt.getFullYear();
     let yearOfAdmission = r['year_of_admission'] || r['Year_of_admission'] || r['year of admission'] || '';
+    let stateRaw = r['state'] || r['State'] || '';
+    let state = normalizeState(stateRaw);
     allRows.push({
       type, isSignup: /sign.?up/i.test(type), isSignin: /sign.?in/i.test(type),
       dt, year: +year || dt.getFullYear(), month: +month || dt.getMonth()+1,
-      week: +week || getWeekNum(dt), day: dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0'),
-      yearOfAdmission: yearOfAdmission ? String(yearOfAdmission).trim() : 'Unknown'
+      week: +week || getWeekNum(dt),
+      day: dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0'),
+      yearOfAdmission: yearOfAdmission ? String(yearOfAdmission).trim() : 'Unknown',
+      state
     });
   });
   populateFilters();
@@ -592,18 +668,17 @@ function groupData(rows, view) {
   const keys = Object.keys(map).sort();
   return {
     labels: keys.map(k => {
-  if (view==='monthly') { const [y,mo]=k.split('-'); return MONTHS[+mo-1]+'\''+String(y).slice(2); }
-  if (view==='weekly')  return k.replace('-',' ');
-  const d = new Date(k+'T00:00:00');
-  return d.getDate()+'/'+(d.getMonth()+1);  // Changed: day first, then month
-}),
+      if (view==='monthly') { const [y,mo]=k.split('-'); return MONTHS[+mo-1]+'\''+String(y).slice(2); }
+      if (view==='weekly')  return k.replace('-',' ');
+      const d = new Date(k+'T00:00:00');
+      return d.getDate()+'/'+(d.getMonth()+1);
+    }),
     signups: keys.map(k=>map[k].signups),
     signins: keys.map(k=>map[k].signins),
     count: keys.length,
   };
 }
 
-// NEW FUNCTION - Year of Admission Data
 function getYearAdmissionData(rows) {
   const map = {};
   rows.forEach(r => {
@@ -611,22 +686,26 @@ function getYearAdmissionData(rows) {
     if (!map[year]) map[year] = 0;
     if (r.isSignup) map[year]++;
   });
-  const sortedYears = Object.keys(map)
-    .filter(y => y !== 'Unknown')
-    .sort((a, b) => {
-      const aNum = parseInt(a);
-      const bNum = parseInt(b);
-      return aNum - bNum;
-    });
+  const sortedYears = Object.keys(map).filter(y => y !== 'Unknown').sort((a,b)=>parseInt(a)-parseInt(b));
   const unknownCount = map['Unknown'] || 0;
-  
   if (unknownCount > 0) sortedYears.push('Unknown');
-  
   return {
     labels: sortedYears,
     data: sortedYears.map(y => map[y]),
-    total: Object.values(map).reduce((a, b) => a + b, 0)
+    total: Object.values(map).reduce((a,b)=>a+b,0)
   };
+}
+
+// ── STATE MAP DATA ──
+function getStateMapData(rows) {
+  const map = {};
+  // Only sign-ups, exclude null/NA states
+  rows.forEach(r => {
+    if (!r.isSignup) return;
+    if (!r.state) return;
+    map[r.state] = (map[r.state] || 0) + 1;
+  });
+  return map;
 }
 
 function destroyChart(id) {
@@ -656,6 +735,193 @@ function labelPlugin() {
       });
     }
   };
+}
+
+// ── INDIA MAP RENDER ──
+async function loadAndRenderIndiaMap(stateData) {
+  const mapContainer = document.getElementById('indiaMapContainer');
+  if (!mapContainer) return;
+
+  // Show loading
+  mapContainer.innerHTML = '<div style="text-align:center;padding:60px 20px;color:#94a3b8"><div class="spinner" style="width:24px;height:24px;border:3px solid #e2e8f0;border-top-color:#2563eb;border-radius:50%;animation:spin 0.7s linear infinite;margin:0 auto 12px"></div>Loading map…</div>';
+
+  try {
+    if (!indiaGeoJSON) {
+      const resp = await fetch('https://raw.githubusercontent.com/geohacker/india/master/state/india_telengana.geojson');
+      indiaGeoJSON = await resp.json();
+    }
+    renderIndiaMap(stateData, mapContainer);
+  } catch(e) {
+    console.error('Map load error:', e);
+    mapContainer.innerHTML = '<div class="map-no-data">Could not load map. Check your connection.</div>';
+  }
+}
+
+function renderIndiaMap(stateData, container) {
+  // Sorted states for sidebar list
+  const sortedStates = Object.entries(stateData)
+    .sort((a,b) => b[1] - a[1]);
+
+  const maxVal = sortedStates.length ? sortedStates[0][1] : 1;
+  const minVal = sortedStates.length ? sortedStates[sortedStates.length-1][1] : 0;
+
+  // Color scale: light blue → deep blue
+  const colorScale = d3.scaleSequential()
+    .domain([0, maxVal])
+    .interpolator(d3.interpolate('#dbeafe', '#1d4ed8'));
+
+  const noDataColor = '#f1f5f9';
+
+  // GeoJSON property name for state
+  // Try to detect correct property from first feature
+  let nameProp = 'NAME_1';
+  if (indiaGeoJSON.features && indiaGeoJSON.features.length) {
+    const props = indiaGeoJSON.features[0].properties;
+    if (props.ST_NM) nameProp = 'ST_NM';
+    else if (props.NAME_1) nameProp = 'NAME_1';
+    else if (props.name) nameProp = 'name';
+    else if (props.NAME) nameProp = 'NAME';
+    else nameProp = Object.keys(props)[0];
+  }
+
+  // Normalize GeoJSON state name to match our data
+  function geoStateName(feature) {
+    const raw = feature.properties[nameProp] || '';
+    return normalizeState(raw) || raw;
+  }
+
+  // SVG dimensions
+  const W = 480, H = 520;
+
+  // D3 projection
+  const projection = d3.geoMercator().fitSize([W, H], indiaGeoJSON);
+  const path = d3.geoPath().projection(projection);
+
+  // Build SVG string
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('id', 'indiaMapSvg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('xmlns', svgNS);
+
+  const tooltip = document.getElementById('mapTooltip');
+
+  indiaGeoJSON.features.forEach(feature => {
+    const stateName = geoStateName(feature);
+    const count = stateData[stateName] || 0;
+    const fill = count > 0 ? colorScale(count) : noDataColor;
+
+    const pathEl = document.createElementNS(svgNS, 'path');
+    pathEl.setAttribute('d', path(feature));
+    pathEl.setAttribute('fill', fill);
+    pathEl.setAttribute('data-state', stateName);
+    pathEl.setAttribute('data-count', count);
+
+    pathEl.addEventListener('mousemove', (e) => {
+      tooltip.style.display = 'block';
+      tooltip.style.left = (e.clientX + 14) + 'px';
+      tooltip.style.top  = (e.clientY - 10) + 'px';
+      document.getElementById('ttState').textContent = stateName;
+      document.getElementById('ttCount').textContent = count > 0
+        ? `${count.toLocaleString()} sign-ups`
+        : 'No data';
+    });
+    pathEl.addEventListener('mouseleave', () => {
+      tooltip.style.display = 'none';
+    });
+
+    svg.appendChild(pathEl);
+
+    // ── STATE LABEL ──
+    const centroid = path.centroid(feature);
+    if (centroid && !isNaN(centroid[0]) && !isNaN(centroid[1])) {
+      const labelGroup = document.createElementNS(svgNS, 'g');
+      labelGroup.style.pointerEvents = 'none';
+
+      // State name (short — first word only for small states)
+      const words = stateName.split(' ');
+      const shortName = words.length > 2 ? words.slice(0,2).join(' ') : stateName;
+
+      const nameText = document.createElementNS(svgNS, 'text');
+      nameText.setAttribute('x', centroid[0]);
+      nameText.setAttribute('y', centroid[1] - 4);
+      nameText.setAttribute('text-anchor', 'middle');
+      nameText.setAttribute('font-size', '6');
+      nameText.setAttribute('font-weight', '700');
+      nameText.setAttribute('fill', count > maxVal * 0.5 ? '#fff' : '#1e3a5f');
+      nameText.setAttribute('paint-order', 'stroke');
+      nameText.setAttribute('stroke', count > maxVal * 0.5 ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.8)');
+      nameText.setAttribute('stroke-width', '2');
+      nameText.setAttribute('stroke-linejoin', 'round');
+      nameText.textContent = shortName;
+      labelGroup.appendChild(nameText);
+
+      // Count below
+      if (count > 0) {
+        const countText = document.createElementNS(svgNS, 'text');
+        countText.setAttribute('x', centroid[0]);
+        countText.setAttribute('y', centroid[1] + 6);
+        countText.setAttribute('text-anchor', 'middle');
+        countText.setAttribute('font-size', '5.5');
+        countText.setAttribute('font-weight', '600');
+        countText.setAttribute('fill', count > maxVal * 0.5 ? 'rgba(255,255,255,0.85)' : '#2563eb');
+        countText.setAttribute('paint-order', 'stroke');
+        countText.setAttribute('stroke', count > maxVal * 0.5 ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.9)');
+        countText.setAttribute('stroke-width', '2');
+        countText.setAttribute('stroke-linejoin', 'round');
+        countText.textContent = count.toLocaleString();
+        labelGroup.appendChild(countText);
+      }
+
+      svg.appendChild(labelGroup);
+    }
+  });
+
+  // Legend gradient (inline SVG linearGradient)
+  const defs = document.createElementNS(svgNS, 'defs');
+  const grad = document.createElementNS(svgNS, 'linearGradient');
+  grad.setAttribute('id', 'mapGrad');
+  grad.setAttribute('x1', '0%'); grad.setAttribute('x2', '100%');
+  grad.setAttribute('y1', '0%'); grad.setAttribute('y2', '0%');
+  const s1 = document.createElementNS(svgNS, 'stop');
+  s1.setAttribute('offset', '0%'); s1.setAttribute('stop-color', '#dbeafe');
+  const s2 = document.createElementNS(svgNS, 'stop');
+  s2.setAttribute('offset', '100%'); s2.setAttribute('stop-color', '#1d4ed8');
+  grad.appendChild(s1); grad.appendChild(s2);
+  defs.appendChild(grad);
+  svg.appendChild(defs);
+
+  // State list for sidebar
+  const listItems = sortedStates.slice(0, 35).map(([ state, count ], i) => {
+    const pct = maxVal ? count / maxVal : 0;
+    const color = colorScale(count);
+    return `
+      <div class="state-row">
+        <div class="state-row-left">
+          <span class="state-rank">${i+1}</span>
+          <span class="state-dot" style="background:${color}"></span>
+          <span class="state-name">${state}</span>
+        </div>
+        <span class="state-count">${count.toLocaleString()}</span>
+      </div>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="map-container">
+      <div id="mapSvgWrapper"></div>
+      <div class="map-legend-panel">
+        <div class="map-legend-title">Sign-ups by State</div>
+        <div class="map-color-scale"></div>
+        <div class="map-scale-labels">
+          <span>${minVal.toLocaleString()}</span>
+          <span>${Math.round(maxVal/2).toLocaleString()}</span>
+          <span>${maxVal.toLocaleString()}</span>
+        </div>
+        <div class="state-list">${listItems || '<div class="map-no-data">No state data available</div>'}</div>
+      </div>
+    </div>`;
+
+  document.getElementById('mapSvgWrapper').appendChild(svg);
 }
 
 function renderDashboard() {
@@ -715,6 +981,13 @@ function renderDashboard() {
         </div>
         <div style="position:relative;height:280px"><canvas id="cYearAdmission"></canvas></div>
       </div>
+      <div class="chart-card full">
+        <div class="chart-header">
+          <div class="chart-title">Sign-ups by State — India Map</div>
+          <div class="chart-sub">Sign Ups only · Jan 2025 onwards · Hover over a state to see count</div>
+        </div>
+        <div id="indiaMapContainer" style="min-height:200px"></div>
+      </div>
     </div>
   `;
 
@@ -722,7 +995,7 @@ function renderDashboard() {
   const ticksX = { color:TICK, font:{size:11}, maxRotation:45, autoSkip:true, maxTicksLimit:Math.min(labels.length,16) };
   const ticksY = { color:TICK, font:{size:11} };
   const lineDatasets = [];
-  if (showSignup) lineDatasets.push({ label:'Sign Ups', data:signups, borderColor:BLUE,  backgroundColor:BLUEF,  borderWidth:2.5, tension:0.45, fill:true, pointBackgroundColor:BLUE,  pointRadius:pointR, pointHoverRadius:6 });
+  if (showSignup) lineDatasets.push({ label:'Sign Ups', data:signups, borderColor:BLUE, backgroundColor:BLUEF, borderWidth:2.5, tension:0.45, fill:true, pointBackgroundColor:BLUE, pointRadius:pointR, pointHoverRadius:6 });
   if (showSignin) lineDatasets.push({ label:'Sign Ins', data:signins, borderColor:GREEN, backgroundColor:GREENF, borderWidth:2.5, tension:0.45, fill:true, pointBackgroundColor:GREEN, pointRadius:pointR, pointHoverRadius:6 });
 
   destroyChart('line');
@@ -735,71 +1008,26 @@ function renderDashboard() {
     }
   });
 
-  // Year of Admission Chart
   destroyChart('yearAdmission');
   const yearAdmData = getYearAdmissionData(filtered);
   const yearColors = yearAdmData.labels.map((label, idx) => {
-    const colors = [
-      'rgba(37,99,235,0.85)',      // Blue
-      'rgba(16,185,129,0.85)',     // Green
-      'rgba(59,130,246,0.85)',     // Bright Blue
-      'rgba(139,92,246,0.85)',     // Purple
-      'rgba(236,72,153,0.85)',     // Pink
-      'rgba(245,158,11,0.85)',     // Amber
-      'rgba(34,197,94,0.85)',      // Emerald
-      'rgba(8,145,178,0.85)',      // Cyan
-      'rgba(168,85,247,0.85)',     // Violet
-      'rgba(219,39,119,0.85)',     // Rose
-      'rgba(75,192,192,0.85)',     // Teal
-      'rgba(255,99,132,0.85)',     // Red
-      'rgba(54,162,235,0.85)',     // Light Blue
-      'rgba(153,102,255,0.85)',    // Light Purple
-      'rgba(201,203,207,0.85)'     // Gray
-    ];
+    const colors = ['rgba(37,99,235,0.85)','rgba(16,185,129,0.85)','rgba(59,130,246,0.85)','rgba(139,92,246,0.85)','rgba(236,72,153,0.85)','rgba(245,158,11,0.85)','rgba(34,197,94,0.85)','rgba(8,145,178,0.85)','rgba(168,85,247,0.85)','rgba(219,39,119,0.85)','rgba(75,192,192,0.85)','rgba(255,99,132,0.85)','rgba(54,162,235,0.85)','rgba(153,102,255,0.85)','rgba(201,203,207,0.85)'];
     return colors[idx % colors.length];
   });
-  
   const yearBorders = yearColors.map(c => c.replace('0.85', '1'));
-  
   chartInstances['yearAdmission'] = new Chart(document.getElementById('cYearAdmission'), {
     type:'bar', plugins:[labelPlugin()],
-    data:{ 
-      labels: yearAdmData.labels,
-      datasets:[{ 
-        label:'Sign Ups', 
-        data: yearAdmData.data,
-        backgroundColor: yearColors,
-        borderColor: yearBorders,
-        borderWidth:1.5, 
-        borderRadius:5, 
-        borderSkipped:false 
-      }] 
-    },
-    options:{ 
-      responsive:true, 
-      maintainAspectRatio:false,
-      plugins:{ 
-        legend:{display:false}, 
-        tooltip:{
-          padding:10,
-          cornerRadius:8,
-          backgroundColor:'rgba(0,0,0,0.85)',
-          titleFont:{size:12, weight:'bold'},
-          bodyFont:{size:11}
-        } 
-      },
-      scales:{ 
-        x:{
-          grid:{display:false},
-          ticks:{color:TICK,font:{size:11}, maxRotation:45, autoSkip:false}
-        }, 
-        y:{
-          grid:{color:GRID},
-          ticks:{color:TICK, font:{size:11},beginAtZero:true} 
-        } 
-      }
+    data:{ labels: yearAdmData.labels, datasets:[{ label:'Sign Ups', data: yearAdmData.data, backgroundColor: yearColors, borderColor: yearBorders, borderWidth:1.5, borderRadius:5, borderSkipped:false }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{padding:10,cornerRadius:8,backgroundColor:'rgba(0,0,0,0.85)',titleFont:{size:12,weight:'bold'},bodyFont:{size:11}} },
+      scales:{ x:{grid:{display:false},ticks:{color:TICK,font:{size:11},maxRotation:45,autoSkip:false}}, y:{grid:{color:GRID},ticks:{color:TICK,font:{size:11},beginAtZero:true}} }
     }
   });
+
+  // Render India map — sign-ups only, all data already filtered from Jan 2025
+  const signupRows = filtered.filter(r => r.isSignup);
+  const stateData = getStateMapData(signupRows);
+  loadAndRenderIndiaMap(stateData);
 }
 
 function attachListeners() {
