@@ -159,7 +159,7 @@
 <!-- LOGIN -->
 <div id="loginPage" style="display:none;">
   <div class="login-card">
-    <div class="login-logo">Activity <span>Dashboard</span></div>
+    <div class="login-logo">Insight<span>Flow</span></div>
     <div class="login-sub">Sign in to access the dashboard</div>
     <button class="btn-google" onclick="signInWithGoogle()">
       <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google"/>
@@ -182,7 +182,7 @@
 <!-- DASHBOARD -->
 <div id="dashboardPage" style="display:none;">
   <header>
-    <div class="logo">Activity <span>Dashboard</span></div>
+    <div class="logo">Insight <span>Flow</span></div>
     <div class="header-right">
       <span class="last-updated" id="lastUpdated">Fetching data…</span>
       <span class="live-badge"><span class="live-dot"></span> Live · Auto-refresh 60s</span>
@@ -902,8 +902,8 @@ function renderDashboard(){
           <div class="chart-sub">Sign Ups only · Jan 2025 onwards · Hover to see counts · Labels on both maps</div>
         </div>
         <div class="map-tabs">
-          <button id="btnMapIndia" class="map-tab ${activeMapTab==='india'?'active-india':''}" onclick="switchMapTab('india')">🇮🇳 India (States)</button>
-          <button id="btnMapFmge"  class="map-tab ${activeMapTab==='fmge'?'active-fmge':''}"  onclick="switchMapTab('fmge')">🌍 FMGE (Countries)</button>
+          <button id="btnMapIndia" class="map-tab ${activeMapTab==='india'?'active-india':''}" onclick="switchMapTab('india')">🇮🇳 India </button>
+          <button id="btnMapFmge"  class="map-tab ${activeMapTab==='fmge'?'active-fmge':''}"  onclick="switchMapTab('fmge')">🌍 FMGE </button>
         </div>
         <div id="mapSvgArea" style="min-height:200px"></div>
       </div>
