@@ -428,7 +428,7 @@ function getFiltered(){
   const y=document.getElementById('yearSel').value, m=document.getElementById('monthSel').value;
   const type=document.getElementById('typeSel').value;
   const from=document.getElementById('dateFrom').value, to=document.getElementById('dateTo').value;
-  const fromDt=from?new Date(from):null, toDt=to?new Date(to+'T23:59:59'):null;
+  const fromDt=from?new Date(from+'T00:00:00'):null, toDt=to?new Date(to+'T23:59:59'):null;
   return allRows.filter(r=>{
     if(y!=='all'&&r.year!==+y) return false;
     if(m!=='all'&&r.month!==+m) return false;
